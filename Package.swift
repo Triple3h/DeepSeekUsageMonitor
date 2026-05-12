@@ -18,7 +18,8 @@ let package = Package(
         .executableTarget(
             name: "DeepSeekUsageMonitor",
             dependencies: ["DeepSeekUsageMonitorCore"],
-            path: "Sources/DeepSeekUsageMonitor"
+            path: "Sources/DeepSeekUsageMonitor",
+            resources: [.process("Resources")]
         )
     ]
 )
