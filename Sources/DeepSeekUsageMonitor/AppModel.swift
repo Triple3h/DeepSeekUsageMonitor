@@ -72,6 +72,17 @@ final class AppModel: ObservableObject {
         do {
             platformBearerDraft = try keychain.read(.platformBearerToken) ?? ""
             platformCookieDraft = try keychain.read(.platformCookie) ?? ""
+
+            #if DEBUG
+            let env = ProcessInfo.processInfo.environment
+            if platformBearerDraft.isEmpty {
+                platformBearerDraft = env["DEEPSEEK_BEARER"] ?? ""
+            }
+            if platformCookieDraft.isEmpty {
+                platformCookieDraft = env["DEEPSEEK_COOKIE"] ?? ""
+            }
+            #endif
+
             balanceWarningThresholdDraft = UserDefaults.standard.string(forKey: "balanceWarningThreshold") ?? "10"
             autoRefreshMinutesDraft = UserDefaults.standard.string(forKey: "autoRefreshMinutes") ?? "5"
             launchAtLoginEnabled = LaunchAtLoginManager.isEnabled

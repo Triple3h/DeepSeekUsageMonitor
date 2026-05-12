@@ -19,7 +19,7 @@ final class SettingsWindowController: ObservableObject {
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "DeepSeek 设置"
-        window.setContentSize(NSSize(width: 560, height: 520))
+        window.setContentSize(NSSize(width: 580, height: 560))
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
         window.level = .floating

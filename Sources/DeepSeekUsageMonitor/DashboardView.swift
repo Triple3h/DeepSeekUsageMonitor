@@ -6,7 +6,7 @@ struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var settingsWindow: SettingsWindowController
 
-    private let panelBorder = Color.black.opacity(0.06)
+    private let panelBorder = Color.primary.opacity(0.08)
     private let muted = Color.secondary
 
     var body: some View {
@@ -139,11 +139,11 @@ struct DashboardView: View {
                 .help("查询下个月")
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 statCard(
                     title: "Token 消耗",
                     value: compactNumber(displayUsage.totalTokens),
-                    subtitle: "输入 \(compactNumber(displayUsage.inputTokens)) · 输出 \(compactNumber(displayUsage.responseTokens))",
+                    subtitle: "\(compactNumber(displayUsage.inputTokens)) / \(compactNumber(displayUsage.responseTokens))",
                     accent: .blue
                 )
                 statCard(
@@ -234,7 +234,7 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Color.black.opacity(0.025))
+        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.06))
     }
 
     private func balanceDetail(title: String, value: String) -> some View {
@@ -251,18 +251,18 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.black.opacity(0.035))
+        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func statCard(title: String, value: String, subtitle: String, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .center, spacing: 4) {
             Rectangle()
                 .fill(LinearGradient(colors: [accent.opacity(0.72), accent], startPoint: .leading, endPoint: .trailing))
                 .frame(height: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
-                .padding(.horizontal, -14)
-                .padding(.top, -14)
+                .padding(.horizontal, -12)
+                .padding(.top, -12)
                 .padding(.bottom, 7)
             Text(title)
                 .font(.system(size: 11))
@@ -275,16 +275,15 @@ struct DashboardView: View {
             Text(subtitle)
                 .font(.system(size: 11))
                 .foregroundStyle(muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .lineLimit(2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color.black.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(12)
+        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
         )
     }
 
@@ -332,7 +331,7 @@ struct DashboardView: View {
             let modelColor = modelColor(item.model, fallbackIndex: index)
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.black.opacity(0.06))
+                    .fill(Color.primary.opacity(0.08))
                 Capsule()
                     .fill(modelColor.opacity(0.2))
                     .frame(width: totalWidth)
@@ -636,7 +635,7 @@ private struct IconButtonStyle: ButtonStyle {
         configuration.label
             .frame(width: 24, height: 24)
             .foregroundStyle(.secondary)
-            .background(configuration.isPressed ? Color.black.opacity(0.08) : Color.clear)
+            .background(configuration.isPressed ? Color.primary.opacity(0.08) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
@@ -663,6 +662,6 @@ private struct FooterButtonStyle: ButtonStyle {
         if kind == .primary {
             return AnyShapeStyle(LinearGradient(colors: [Color(red: 0.31, green: 0.43, blue: 0.97), Color(red: 0.15, green: 0.39, blue: 0.92)], startPoint: .topLeading, endPoint: .bottomTrailing))
         }
-        return AnyShapeStyle(Color.black.opacity(isPressed ? 0.1 : 0.055))
+        return AnyShapeStyle(Color.primary.opacity(isPressed ? 0.1 : 0.06))
     }
 }

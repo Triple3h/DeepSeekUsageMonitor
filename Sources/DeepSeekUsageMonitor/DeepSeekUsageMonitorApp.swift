@@ -48,7 +48,7 @@ struct DeepSeekUsageMonitorApp: App {
             DashboardView()
                 .environmentObject(model)
                 .environmentObject(settingsWindow)
-                .frame(width: 340)
+                .frame(width: 380)
         } label: {
             HStack(spacing: 10) {
                 if model.isBalanceWarning {
