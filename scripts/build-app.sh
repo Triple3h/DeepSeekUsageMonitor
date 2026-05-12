@@ -23,6 +23,9 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/"
 
+# Copy SPM resource bundle
+cp -R "${BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle" "${APP_BUNDLE}/Contents/Resources/"
+
 # Copy Info.plist
 cp "scripts/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 

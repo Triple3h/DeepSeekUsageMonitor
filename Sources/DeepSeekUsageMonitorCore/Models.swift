@@ -110,7 +110,7 @@ public struct PlatformMetric: Equatable, Identifiable {
     }
 }
 
-public struct UsageAmountReport: Equatable {
+public struct UsageAmountReport: Equatable, Codable {
     public let endpoint: URL
     public let capturedAt: Date
     public let rawJSON: String
@@ -150,7 +150,7 @@ public struct UsageAmountReport: Equatable {
     }
 }
 
-public struct UsageModelAmount: Equatable, Identifiable {
+public struct UsageModelAmount: Equatable, Identifiable, Codable {
     public var id: String { model }
 
     public let model: String
@@ -170,7 +170,7 @@ public struct UsageModelAmount: Equatable, Identifiable {
     public var totalTokens: Int { inputTokens + responseTokens }
 }
 
-public struct UsageDayAmount: Equatable, Identifiable {
+public struct UsageDayAmount: Equatable, Identifiable, Codable {
     public var id: String { date }
 
     public let date: String
@@ -190,7 +190,7 @@ public struct UsageDayAmount: Equatable, Identifiable {
     }
 }
 
-public struct UsageCostReport: Equatable {
+public struct UsageCostReport: Equatable, Codable {
     public let endpoint: URL
     public let capturedAt: Date
     public let rawJSON: String
@@ -212,7 +212,7 @@ public struct UsageCostReport: Equatable {
     }
 }
 
-public struct UsageCostModelAmount: Equatable, Identifiable {
+public struct UsageCostModelAmount: Equatable, Identifiable, Codable {
     public var id: String { model }
 
     public let model: String
@@ -233,7 +233,7 @@ public struct UsageCostModelAmount: Equatable, Identifiable {
     }
 }
 
-public struct UsageCostDayAmount: Equatable, Identifiable {
+public struct UsageCostDayAmount: Equatable, Identifiable, Codable {
     public var id: String { date }
 
     public let date: String

@@ -11,6 +11,8 @@ final class AppModel: ObservableObject {
     @Published var launchAtLoginEnabled = false
     @Published var usageAmount: UsageAmountReport?
     @Published var usageCost: UsageCostReport?
+    @Published var previousMonthUsageAmount: UsageAmountReport?
+    @Published var previousMonthUsageCost: UsageCostReport?
     @Published var userSummary: UserSummaryReport?
     @Published var selectedPeriod: UsagePeriod = .today
     @Published var selectedMonth: Int
@@ -22,6 +24,7 @@ final class AppModel: ObservableObject {
 
     private let keychain = KeychainStore()
     private let platformClient = PlatformSummaryClient()
+    private let cacheStore = UsageCacheStore()
     private var backgroundRefreshTask: Task<Void, Never>?
 
     init() {
@@ -149,6 +152,15 @@ final class AppModel: ObservableObject {
         isRefreshingUsage = true
         defer { isRefreshingUsage = false }
 
+        let isCurrent = isCurrentMonth(year: selectedYear, month: selectedMonth)
+        let cacheMaxAge: TimeInterval = isCurrent ? 3600 : 604800 // 1 hour for current month, 7 days for history
+
+        // Show cached data immediately if available and not stale
+        if cacheStore.isCacheValid(month: selectedMonth, year: selectedYear, maxAge: cacheMaxAge) {
+            if usageAmount == nil { usageAmount = cacheStore.loadUsage(month: selectedMonth, year: selectedYear) }
+            if usageCost == nil { usageCost = cacheStore.loadCost(month: selectedMonth, year: selectedYear) }
+        }
+
         do {
             let bearer = try keychain.read(.platformBearerToken) ?? ""
             let cookie = try keychain.read(.platformCookie)
@@ -165,18 +177,110 @@ final class AppModel: ObservableObject {
                 cookie: cookie
             )
             async let summary = platformClient.fetchUserSummary(bearerToken: bearer, cookie: cookie)
-            usageAmount = try await usage
-            usageCost = try await cost
+            let newUsage = try await usage
+            let newCost = try await cost
+            usageAmount = newUsage
+            usageCost = newCost
             userSummary = try await summary
+            cacheStore.save(usage: newUsage, month: selectedMonth, year: selectedYear)
+            cacheStore.save(cost: newCost, month: selectedMonth, year: selectedYear)
             statusMessage = "用量已刷新"
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            // If network fails but we have cached data, keep it and show a subtle message
+            if usageAmount != nil || usageCost != nil {
+                statusMessage = "已显示缓存数据"
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
     func refreshAll() async {
         await refreshPlatformData()
+        if selectedPeriod == .last7Days {
+            await refreshPreviousMonthDataIfNeeded()
+        }
+    }
+
+    func refreshPreviousMonthDataIfNeeded() async {
+        guard selectedPeriod == .last7Days, last7DaysSpansMonths else { return }
+        let (month, year) = previousMonthForLast7Days
+
+        // Try cache first
+        if cacheStore.isCacheValid(month: month, year: year, maxAge: 604800) {
+            previousMonthUsageAmount = cacheStore.loadUsage(month: month, year: year)
+            previousMonthUsageCost = cacheStore.loadCost(month: month, year: year)
+        }
+
+        // Skip network if cache is fresh
+        if previousMonthUsageAmount != nil && previousMonthUsageCost != nil {
+            return
+        }
+
+        do {
+            let bearer = try keychain.read(.platformBearerToken) ?? ""
+            let cookie = try keychain.read(.platformCookie)
+            async let usage = platformClient.fetchUsageAmount(
+                month: month,
+                year: year,
+                bearerToken: bearer,
+                cookie: cookie
+            )
+            async let cost = platformClient.fetchUsageCost(
+                month: month,
+                year: year,
+                bearerToken: bearer,
+                cookie: cookie
+            )
+            let newUsage = try await usage
+            let newCost = try await cost
+            previousMonthUsageAmount = newUsage
+            previousMonthUsageCost = newCost
+            cacheStore.save(usage: newUsage, month: month, year: year)
+            cacheStore.save(cost: newCost, month: month, year: year)
+        } catch {
+            // Silently fail; previous month data is best-effort for last-7-days view
+        }
+    }
+
+    var last7DaysSpansMonths: Bool {
+        let calendar = Calendar.current
+        let today = Date()
+        guard let weekAgo = calendar.date(byAdding: .day, value: -6, to: today) else { return false }
+        let todayMonth = calendar.component(.month, from: today)
+        let weekAgoMonth = calendar.component(.month, from: weekAgo)
+        return todayMonth != weekAgoMonth
+    }
+
+    var previousMonthForLast7Days: (month: Int, year: Int) {
+        let calendar = Calendar.current
+        let today = Date()
+        guard let weekAgo = calendar.date(byAdding: .day, value: -6, to: today) else {
+            return (selectedMonth, selectedYear)
+        }
+        let components = calendar.dateComponents([.year, .month], from: weekAgo)
+        return (components.month ?? 1, components.year ?? 2026)
+    }
+
+    func last7DaysDateStrings() -> [String] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        var dates: [String] = []
+        for i in (0...6).reversed() {
+            if let date = calendar.date(byAdding: .day, value: -i, to: Date()) {
+                dates.append(formatter.string(from: date))
+            }
+        }
+        return dates
+    }
+
+    private func isCurrentMonth(year: Int, month: Int) -> Bool {
+        let current = Calendar.current.dateComponents([.year, .month], from: Date())
+        return current.year == year && current.month == month
     }
 
     func moveToPreviousMonth() {
@@ -186,7 +290,9 @@ final class AppModel: ObservableObject {
         } else {
             selectedMonth -= 1
         }
-        selectedPeriod = .month
+        if selectedPeriod == .today {
+            selectedPeriod = .month
+        }
     }
 
     func moveToNextMonth() {
@@ -199,12 +305,15 @@ final class AppModel: ObservableObject {
         } else {
             selectedMonth += 1
         }
-        selectedPeriod = .month
+        if selectedPeriod == .today {
+            selectedPeriod = .month
+        }
     }
 }
 
 enum UsagePeriod: Hashable {
     case today
+    case last7Days
     case month
 }
 

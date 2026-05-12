@@ -107,36 +107,49 @@ struct DashboardView: View {
                 Spacer()
                 Picker("", selection: $model.selectedPeriod) {
                     Text("今日").tag(UsagePeriod.today)
+                    Text("近7日").tag(UsagePeriod.last7Days)
                     Text("本月").tag(UsagePeriod.month)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 108)
+                .frame(width: 160)
+                .onChange(of: model.selectedPeriod) { newPeriod in
+                    if newPeriod == .last7Days {
+                        Task { await model.refreshPreviousMonthDataIfNeeded() }
+                    }
+                }
             }
 
             HStack(spacing: 8) {
-                Button {
-                    model.moveToPreviousMonth()
-                    Task { await model.refreshPlatformData() }
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(IconButtonStyle())
-                .help("查询上个月")
+                if model.selectedPeriod == .last7Days {
+                    Text("近7日")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Button {
+                        model.moveToPreviousMonth()
+                        Task { await model.refreshPlatformData() }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .buttonStyle(IconButtonStyle())
+                    .help("查询上个月")
 
-                Text(model.selectedMonthTitle)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .frame(maxWidth: .infinity)
+                    Text(model.selectedMonthTitle)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity)
 
-                Button {
-                    model.moveToNextMonth()
-                    Task { await model.refreshPlatformData() }
-                } label: {
-                    Image(systemName: "chevron.right")
+                    Button {
+                        model.moveToNextMonth()
+                        Task { await model.refreshPlatformData() }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .buttonStyle(IconButtonStyle())
+                    .disabled(!model.canMoveToNextMonth)
+                    .help("查询下个月")
                 }
-                .buttonStyle(IconButtonStyle())
-                .disabled(!model.canMoveToNextMonth)
-                .help("查询下个月")
             }
 
             HStack(spacing: 8) {
@@ -404,6 +417,12 @@ struct DashboardView: View {
     }
 
     private var displayUsage: UsageDisplay {
+        if model.selectedPeriod == .last7Days {
+            let days = last7DaysAmountDays
+            let mergedModels = mergeDayModels(days)
+            return UsageDisplay(models: mergedModels)
+        }
+
         guard let report = model.usageAmount else {
             return UsageDisplay.empty
         }
@@ -422,12 +441,54 @@ struct DashboardView: View {
     }
 
     private var chartDays: [UsageDayAmount] {
+        if model.selectedPeriod == .last7Days {
+            let targetDates = model.last7DaysDateStrings()
+            let allDays = (model.usageAmount?.days ?? []) + (model.previousMonthUsageAmount?.days ?? [])
+            let dayMap = Dictionary(uniqueKeysWithValues: allDays.map { ($0.date, $0) })
+            return targetDates.map { date in
+                dayMap[date] ?? UsageDayAmount(date: date, models: [])
+            }
+        }
         guard let report = model.usageAmount else {
             return (0..<7).map { UsageDayAmount(date: "D\($0 + 1)", models: []) }
         }
         let active = report.days.filter { $0.totalTokens > 0 }
         let source = active.isEmpty ? report.days : active
         return Array(source.suffix(7))
+    }
+
+    private var last7DaysAmountDays: [UsageDayAmount] {
+        let targetDates = Set(model.last7DaysDateStrings())
+        let allDays = (model.usageAmount?.days ?? []) + (model.previousMonthUsageAmount?.days ?? [])
+        return allDays.filter { targetDates.contains($0.date) }.sorted { $0.date < $1.date }
+    }
+
+    private func mergeDayModels(_ days: [UsageDayAmount]) -> [UsageModelAmount] {
+        var merged: [String: [String: Int]] = [:]
+        for day in days {
+            for model in day.models {
+                var usage = merged[model.model] ?? [:]
+                for (type, amount) in model.usage {
+                    usage[type, default: 0] += amount
+                }
+                merged[model.model] = usage
+            }
+        }
+        return merged.map { UsageModelAmount(model: $0.key, usage: $0.value) }
+    }
+
+    private func mergeCostDayModels(_ days: [UsageCostDayAmount]) -> [UsageCostModelAmount] {
+        var merged: [String: [String: Decimal]] = [:]
+        for day in days {
+            for model in day.models {
+                var usage = merged[model.model] ?? [:]
+                for (type, amount) in model.usage {
+                    usage[type, default: 0] += amount
+                }
+                merged[model.model] = usage
+            }
+        }
+        return merged.map { UsageCostModelAmount(model: $0.key, usage: $0.value) }
     }
 
     private var chartModelNames: [String] {
@@ -467,26 +528,56 @@ struct DashboardView: View {
         if model.selectedPeriod == .month {
             return model.usageCost?.totalCost
         }
+        if model.selectedPeriod == .last7Days {
+            return last7DaysCostDays.reduce(0) { $0 + $1.totalCost }
+        }
         return todayCost
     }
 
     private var usageCostTitle: String {
-        model.selectedPeriod == .month ? "本月花费" : "今日花费"
+        switch model.selectedPeriod {
+        case .month: return "本月花费"
+        case .last7Days: return "近7日花费"
+        case .today: return "今日花费"
+        }
     }
 
     private var usageCostSubtitle: String {
-        model.selectedPeriod == .month ? model.selectedMonthTitle : todayDateString()
+        switch model.selectedPeriod {
+        case .month: return model.selectedMonthTitle
+        case .last7Days: return last7DaysDateRangeString()
+        case .today: return todayDateString()
+        }
+    }
+
+    private var last7DaysCostDays: [UsageCostDayAmount] {
+        let targetDates = Set(model.last7DaysDateStrings())
+        let allDays = (model.usageCost?.days ?? []) + (model.previousMonthUsageCost?.days ?? [])
+        return allDays.filter { targetDates.contains($0.date) }.sorted { $0.date < $1.date }
+    }
+
+    private func last7DaysDateRangeString() -> String {
+        let dates = model.last7DaysDateStrings()
+        guard let first = dates.first, let last = dates.last else { return "" }
+        return "\(first) 至 \(last)"
     }
 
     private func cost(for date: String) -> Decimal? {
-        model.usageCost?.days.first(where: { $0.date == date })?.totalCost
+        if model.selectedPeriod == .last7Days {
+            let allDays = (model.usageCost?.days ?? []) + (model.previousMonthUsageCost?.days ?? [])
+            return allDays.first(where: { $0.date == date })?.totalCost
+        }
+        return model.usageCost?.days.first(where: { $0.date == date })?.totalCost
     }
 
     private func cost(for item: UsageModelAmount) -> Decimal? {
         let costModels: [UsageCostModelAmount]
-        if model.selectedPeriod == .month {
+        switch model.selectedPeriod {
+        case .month:
             costModels = model.usageCost?.models ?? []
-        } else {
+        case .last7Days:
+            costModels = mergeCostDayModels(last7DaysCostDays)
+        case .today:
             costModels = model.usageCost?.days.first(where: { $0.date == displayUsageDate })?.models ?? []
         }
         return costModels.first(where: { $0.model == item.model })?.totalCost
@@ -534,16 +625,20 @@ struct DashboardView: View {
     }
 
     private func modelBadge(_ model: String, index: Int) -> String {
-        if model.localizedCaseInsensitiveContains("flash") {
-            return "F"
+        let lower = model.lowercased()
+        if lower.contains("flash") {
+            return "FL"
         }
-        if model.localizedCaseInsensitiveContains("reasoner") {
+        if lower.contains("reasoner") || lower.contains("r1") {
             return "R1"
         }
-        if model.localizedCaseInsensitiveContains("chat") {
+        if lower.contains("chat") || lower.contains("v3") {
             return "V3"
         }
-        return index == 0 ? "PRO" : "M\(index + 1)"
+        if lower.contains("pro") {
+            return "PRO"
+        }
+        return "M\(index + 1)"
     }
 
     private func modelDescription(_ item: UsageModelAmount) -> String {
