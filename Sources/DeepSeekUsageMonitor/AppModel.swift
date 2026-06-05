@@ -17,6 +17,9 @@ final class AppModel: ObservableObject {
     @Published var selectedPeriod: UsagePeriod = .today
     @Published var selectedMonth: Int
     @Published var selectedYear: Int
+    /// 面板是否显示设置页面
+    @Published var isSettingsShown = false
+
     @Published var isRefreshingBalance = false
     @Published var isRefreshingUsage = false
     @Published var statusMessage = "未刷新"
@@ -131,6 +134,11 @@ final class AppModel: ObservableObject {
                 await self.refreshAll()
             }
         }
+    }
+
+    func stopBackgroundRefresh() {
+        backgroundRefreshTask?.cancel()
+        backgroundRefreshTask = nil
     }
 
     func refreshBalance() async {

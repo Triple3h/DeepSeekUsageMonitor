@@ -29,6 +29,28 @@ cp -R "${BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle" "${APP_BUNDLE}/Contents/Reso
 # Copy Info.plist
 cp "scripts/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 
+# Copy AppIcon.icns
+if [ -f "Resources/AppIcon.icns" ]; then
+    cp "Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/"
+    echo "Added AppIcon.icns"
+fi
+
+# Compile Asset Catalog (if available)
+if [ -d "Resources/Assets.xcassets" ]; then
+    mkdir -p ".build/assetcatalog"
+    if xcrun actool "Resources/Assets.xcassets" \
+        --compile "${APP_BUNDLE}/Contents/Resources" \
+        --platform macosx \
+        --minimum-deployment-target 13.0 \
+        --target-device mac \
+        --app-icon AppIcon \
+        --output-partial-info-plist ".build/assetcatalog/asset-info.plist" 2>/dev/null; then
+        echo "Compiled Asset Catalog"
+    else
+        echo "Asset Catalog compilation skipped (using .icns fallback)"
+    fi
+fi
+
 # Ad-hoc sign the app bundle
 echo "Signing app bundle..."
 codesign --force --deep --sign - "${APP_BUNDLE}"
