@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'design-system/**'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get version from VERSION file
+        id: version
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+      
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build DMG
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          DMG_NAME="DeepSeekUsageMonitor-${{ steps.version.outputs.tag }}.dmg"
+          zsh scripts/build-dmg.sh "${DMG_NAME}"
+          echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_ENV
+      
+      - name: Create Git Tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+      
+      - name: Generate Release Notes
+        if: steps.check_tag.outputs.exists == 'false'
+        id: notes
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            NOTES=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            NOTES=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+          
+          if [ -z "$NOTES" ]; then
+            NOTES="- Minor improvements and bug fixes"
+          fi
+          
+          # Escape for GitHub Actions output
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          echo "body=${NOTES}" >> $GITHUB_OUTPUT
+      
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: DeepSeek Usage Monitor ${{ steps.version.outputs.tag }}
+          body: |
+            ## DeepSeek Usage Monitor ${{ steps.version.outputs.tag }}
+            
+            ### Changes
+            ${{ steps.notes.outputs.body }}
+            
+            ### Installation
+            1. Download `DeepSeekUsageMonitor-${{ steps.version.outputs.tag }}.dmg`
+            2. Open the DMG file
+            3. Drag the app to Applications folder
+            4. Launch from Applications or Spotlight
+            
+            > **Note**: This app requires macOS 13.0 or later.
+          draft: false
+          prerelease: false
+          files: ${{ env.DMG_NAME }}

@@ -26,8 +26,13 @@ cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/"
 # Copy SPM resource bundle
 cp -R "${BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle" "${APP_BUNDLE}/Contents/Resources/"
 
-# Copy Info.plist
+# Copy Info.plist and inject version from VERSION file
 cp "scripts/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
+if [ -f "VERSION" ]; then
+    VERSION=$(cat VERSION | tr -d '[:space:]')
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${APP_BUNDLE}/Contents/Info.plist"
+    echo "Injected version: ${VERSION}"
+fi
 
 # Copy AppIcon.icns
 if [ -f "Resources/AppIcon.icns" ]; then
