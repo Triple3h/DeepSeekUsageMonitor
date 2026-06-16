@@ -96,9 +96,7 @@ struct SettingsView: View {
                     .font(.headline)
                     .foregroundStyle(Theme.brand)
 
-                credentialRow(label: "Bearer Token", text: $model.platformBearerDraft, height: 64)
-
-                credentialRow(label: "Cookie", text: $model.platformCookieDraft, height: 88)
+                credentialRow(label: "Bearer Token", text: $model.platformBearerDraft, height: 88)
 
                 Text("敏感信息保存到 macOS Keychain，不会上传到任何服务器。")
                     .font(.caption)

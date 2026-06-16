@@ -24,7 +24,7 @@ swift run DeepSeekUsageMonitor
 swift test
 ```
 
-Debug mode reads credentials from env vars `DEEPSEEK_BEARER` and `DEEPSEEK_COOKIE` if Keychain is empty.
+Debug mode reads Bearer Token from env var `DEEPSEEK_BEARER` if Keychain is empty.
 
 ## Versioning & Release
 
@@ -55,7 +55,7 @@ Debug mode reads credentials from env vars `DEEPSEEK_BEARER` and `DEEPSEEK_COOKI
 
 ### Data Flow
 
-`AppModel` → `PlatformSummaryClient` (3 internal endpoints at `platform.deepseek.com/api/v0/...`) → results published to SwiftUI views. `UsageCacheStore` caches to disk (1h for current month, 7d for history). `KeychainStore` persists bearer token and cookie via macOS Security framework.
+`AppModel` → `PlatformSummaryClient` (3 internal endpoints at `platform.deepseek.com/api/v0/...`) → results published to SwiftUI views. `UsageCacheStore` caches to disk (1h for current month, 7d for history). `KeychainStore` persists bearer token via macOS Security framework.
 
 ### UI Structure
 
@@ -68,6 +68,6 @@ Debug mode reads credentials from env vars `DEEPSEEK_BEARER` and `DEEPSEEK_COOKI
 ## Important Notes
 
 - Endpoints are **internal web APIs** (`platform.deepseek.com/api/v0/...`), not official public APIs — may change without notice
-- Login state expires; users must re-copy Bearer Token and Cookie from browser dev tools
+- Login state expires; users must re-copy Bearer Token from browser dev tools
 - No `.xcodeproj` — pure `Package.swift` project, macOS 13+ target
 - `LaunchAtLoginManager` writes a launchd plist to `~/Library/LaunchAgents/`

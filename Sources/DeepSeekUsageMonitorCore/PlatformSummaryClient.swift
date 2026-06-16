@@ -29,33 +29,33 @@ public final class PlatformSummaryClient {
         self.baseURL = baseURL
     }
 
-    public func fetchUserSummary(bearerToken: String, cookie: String?) async throws -> UserSummaryReport {
+    public func fetchUserSummary(bearerToken: String) async throws -> UserSummaryReport {
         let endpoint = baseURL.appending(path: "api/v0/users/get_user_summary")
-        let data = try await fetchData(endpoint: endpoint, bearerToken: bearerToken, cookie: cookie)
+        let data = try await fetchData(endpoint: endpoint, bearerToken: bearerToken)
         return try UserSummaryParser().parse(data: data, endpoint: endpoint)
     }
 
-    public func fetchUsageAmount(month: Int, year: Int, bearerToken: String, cookie: String?) async throws -> UsageAmountReport {
+    public func fetchUsageAmount(month: Int, year: Int, bearerToken: String) async throws -> UsageAmountReport {
         var components = URLComponents(url: baseURL.appending(path: "api/v0/usage/amount"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "month", value: String(month)),
             URLQueryItem(name: "year", value: String(year))
         ]
-        let data = try await fetchData(endpoint: components.url!, bearerToken: bearerToken, cookie: cookie)
+        let data = try await fetchData(endpoint: components.url!, bearerToken: bearerToken)
         return try UsageAmountParser().parse(data: data, endpoint: components.url!)
     }
 
-    public func fetchUsageCost(month: Int, year: Int, bearerToken: String, cookie: String?) async throws -> UsageCostReport {
+    public func fetchUsageCost(month: Int, year: Int, bearerToken: String) async throws -> UsageCostReport {
         var components = URLComponents(url: baseURL.appending(path: "api/v0/usage/cost"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "month", value: String(month)),
             URLQueryItem(name: "year", value: String(year))
         ]
-        let data = try await fetchData(endpoint: components.url!, bearerToken: bearerToken, cookie: cookie)
+        let data = try await fetchData(endpoint: components.url!, bearerToken: bearerToken)
         return try UsageCostParser().parse(data: data, endpoint: components.url!)
     }
 
-    private func fetchData(endpoint: URL, bearerToken: String, cookie: String?) async throws -> Data {
+    private func fetchData(endpoint: URL, bearerToken: String) async throws -> Data {
         let token = bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else {
             throw PlatformSummaryClientError.missingBearerToken
@@ -68,9 +68,6 @@ public final class PlatformSummaryClient {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("https://platform.deepseek.com/usage", forHTTPHeaderField: "Referer")
         request.setValue("1.0.0", forHTTPHeaderField: "X-App-Version")
-        if let cookie, !cookie.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {

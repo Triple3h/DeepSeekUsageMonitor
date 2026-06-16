@@ -5,7 +5,6 @@ import Foundation
 @MainActor
 final class AppModel: ObservableObject {
     @Published var platformBearerDraft = ""
-    @Published var platformCookieDraft = ""
     @Published var balanceWarningThresholdDraft = "10"
     @Published var autoRefreshMinutesDraft = "5"
     @Published var launchAtLoginEnabled = false
@@ -67,25 +66,19 @@ final class AppModel: ObservableObject {
 
     var platformCredentialStatus: PlatformCredentialStatus {
         let token = (try? keychain.read(.platformBearerToken)) ?? nil
-        let cookie = (try? keychain.read(.platformCookie)) ?? nil
         return PlatformCredentialStatus(
-            hasBearerToken: token?.isEmpty == false,
-            hasCookie: cookie?.isEmpty == false
+            hasBearerToken: token?.isEmpty == false
         )
     }
 
     func loadSavedCredentials() {
         do {
             platformBearerDraft = try keychain.read(.platformBearerToken) ?? ""
-            platformCookieDraft = try keychain.read(.platformCookie) ?? ""
 
             #if DEBUG
             let env = ProcessInfo.processInfo.environment
             if platformBearerDraft.isEmpty {
                 platformBearerDraft = env["DEEPSEEK_BEARER"] ?? ""
-            }
-            if platformCookieDraft.isEmpty {
-                platformCookieDraft = env["DEEPSEEK_COOKIE"] ?? ""
             }
             #endif
 
@@ -101,7 +94,6 @@ final class AppModel: ObservableObject {
         do {
             let previousRefreshMinutes = UserDefaults.standard.string(forKey: "autoRefreshMinutes") ?? "5"
             try keychain.save(platformBearerDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: .platformBearerToken)
-            try keychain.save(platformCookieDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: .platformCookie)
             UserDefaults.standard.set(balanceWarningThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "balanceWarningThreshold")
             UserDefaults.standard.set(autoRefreshMinutesDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "autoRefreshMinutes")
             if previousRefreshMinutes != autoRefreshMinutesDraft {
@@ -147,8 +139,7 @@ final class AppModel: ObservableObject {
 
         do {
             let bearer = try keychain.read(.platformBearerToken) ?? ""
-            let cookie = try keychain.read(.platformCookie)
-            userSummary = try await platformClient.fetchUserSummary(bearerToken: bearer, cookie: cookie)
+            userSummary = try await platformClient.fetchUserSummary(bearerToken: bearer)
             statusMessage = "余额已刷新"
             errorMessage = nil
         } catch {
@@ -171,20 +162,17 @@ final class AppModel: ObservableObject {
 
         do {
             let bearer = try keychain.read(.platformBearerToken) ?? ""
-            let cookie = try keychain.read(.platformCookie)
             async let usage = platformClient.fetchUsageAmount(
                 month: selectedMonth,
                 year: selectedYear,
-                bearerToken: bearer,
-                cookie: cookie
+                bearerToken: bearer
             )
             async let cost = platformClient.fetchUsageCost(
                 month: selectedMonth,
                 year: selectedYear,
-                bearerToken: bearer,
-                cookie: cookie
+                bearerToken: bearer
             )
-            async let summary = platformClient.fetchUserSummary(bearerToken: bearer, cookie: cookie)
+            async let summary = platformClient.fetchUserSummary(bearerToken: bearer)
             let newUsage = try await usage
             let newCost = try await cost
             usageAmount = newUsage
@@ -228,18 +216,15 @@ final class AppModel: ObservableObject {
 
         do {
             let bearer = try keychain.read(.platformBearerToken) ?? ""
-            let cookie = try keychain.read(.platformCookie)
             async let usage = platformClient.fetchUsageAmount(
                 month: month,
                 year: year,
-                bearerToken: bearer,
-                cookie: cookie
+                bearerToken: bearer
             )
             async let cost = platformClient.fetchUsageCost(
                 month: month,
                 year: year,
-                bearerToken: bearer,
-                cookie: cookie
+                bearerToken: bearer
             )
             let newUsage = try await usage
             let newCost = try await cost

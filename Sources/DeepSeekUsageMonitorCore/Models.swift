@@ -76,11 +76,9 @@ public struct TokenEstimate: Equatable {
 
 public struct PlatformCredentialStatus: Equatable {
     public let hasBearerToken: Bool
-    public let hasCookie: Bool
 
-    public init(hasBearerToken: Bool, hasCookie: Bool) {
+    public init(hasBearerToken: Bool) {
         self.hasBearerToken = hasBearerToken
-        self.hasCookie = hasCookie
     }
 }
 
