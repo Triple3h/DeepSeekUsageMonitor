@@ -7,3 +7,8 @@
 .DS_Store
 xcuserdata/
 DerivedData/
+.codegraph/
+.reasonix/
+reasonix.toml
+docs/
+.codebuddy/

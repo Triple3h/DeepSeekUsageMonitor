@@ -15,19 +15,20 @@ struct UsageSectionView: View {
     let money: (Decimal?, String?) -> String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("TOKEN 用量")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
+
                 Picker("", selection: $model.selectedPeriod) {
                     Text("今日").tag(UsagePeriod.today)
                     Text("近7日").tag(UsagePeriod.last7Days)
                     Text("本月").tag(UsagePeriod.month)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 160)
+                .frame(width: 142)
                 .onChange(of: model.selectedPeriod) { newPeriod in
                     if newPeriod == .last7Days {
                         Task { await model.refreshPreviousMonthDataIfNeeded() }
@@ -138,4 +139,5 @@ struct UsageSectionView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: Date())
     }
+
 }

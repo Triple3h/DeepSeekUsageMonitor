@@ -17,7 +17,7 @@ struct MiniChartView: View {
                     ChartBar(day: day, maxValue: maxValue, chartModelNames: chartModelNames, modelColor: modelColor)
                 }
             }
-            .frame(height: 76)
+            .frame(height: 88)
 
             HStack(spacing: 10) {
                 ForEach(Array(chartModelNames.prefix(3).enumerated()), id: \.element) { index, modelName in
@@ -30,6 +30,7 @@ struct MiniChartView: View {
             .padding(.horizontal, 4)
         }
         .padding(.horizontal, 4)
+        .padding(.top, 2)
     }
 
     private func chartLegend(color: Color, title: String) -> some View {
@@ -63,15 +64,6 @@ private struct ChartBar: View {
         let hitRatio = hasData ? Double(hitTokens) / Double(total) : 0
 
         return VStack(spacing: 3) {
-            // 百分比标签：有数据显示缓存命中率，无数据显示 "0"
-            Text(hasData ? "\(Int((hitRatio * 100).rounded()))%" : "0")
-                .font(.system(size: 8, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(hasData ? muted : muted.opacity(0.5))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(height: 10)
-
             // 柱体
             SegmentedBar(day: day, barHeight: barHeight, chartModelNames: chartModelNames, modelColor: modelColor, hasData: hasData)
 
@@ -84,7 +76,7 @@ private struct ChartBar: View {
                 .lineLimit(1)
                 .frame(height: 10)
         }
-        .frame(maxHeight: 86, alignment: .bottom)
+        .frame(maxHeight: 88, alignment: .bottom)
         .help(hasData
             ? "\(day.date): \(total.formatted()) tokens · 缓存命中 \(hitTokens.formatted()) (\(Int((hitRatio * 100).rounded()))%)"
             : "\(day.date): 无数据"
@@ -122,7 +114,7 @@ private struct SegmentedBar: View {
                     .frame(height: 4)
             }
         }
-        .frame(height: 60, alignment: .bottom)
+        .frame(height: 66, alignment: .bottom)
     }
 
     private func chartSegments(for day: UsageDayAmount) -> [(model: String, ratio: Double)] {

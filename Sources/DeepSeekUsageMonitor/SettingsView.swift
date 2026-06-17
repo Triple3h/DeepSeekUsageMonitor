@@ -1,4 +1,5 @@
 import AppKit
+import DeepSeekUsageMonitorCore
 import SwiftUI
 
 struct SettingsView: View {
@@ -31,47 +32,6 @@ struct SettingsView: View {
 
                 Spacer()
 
-                // 占位，保持标题居中
-                Color.clear.frame(width: 50, height: 1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: .windowBackgroundColor))
-
-            Divider()
-
-            VStack(spacing: 12) {
-                credentialSection
-                warningSection
-                debugSection
-                saveActions
-            }
-            .padding(16)
-            .frame(maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
-
-            Divider()
-
-            // 底部栏（跟 DashboardView 的 FooterView 保持一致）
-            HStack(spacing: 8) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        model.isSettingsShown = false
-                    }
-                } label: {
-                    Label("返回面板", systemImage: "chevron.left")
-                }
-                .buttonStyle(FooterButtonStyle(kind: .secondary))
-
-                Button {
-                    NSWorkspace.shared.open(URL(string: "https://platform.deepseek.com/usage")!)
-                } label: {
-                    Label("打开控制台", systemImage: "arrow.up.right.square")
-                }
-                .buttonStyle(FooterButtonStyle(kind: .primary))
-
-                Spacer()
-
                 Button {
                     NSApplication.shared.terminate(nil)
                 } label: {
@@ -81,26 +41,139 @@ struct SettingsView: View {
                 .buttonStyle(IconButtonStyle())
                 .help("退出应用")
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: .windowBackgroundColor))
+
+            Divider()
+
+            VStack(spacing: 12) {
+                appearanceSection
+                deepSeekCredentialSection
+                mimoCredentialSection
+                generalSettingsSection
+                debugSection
+                saveActions
+            }
+            .padding(16)
+            .frame(maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
     }
 
-    // MARK: - 凭证
+    // MARK: - 外观主题
 
-    private var credentialSection: some View {
+    private var appearanceSection: some View {
         SectionCard {
             VStack(alignment: .leading, spacing: 10) {
-                Label("网页端接口凭证", systemImage: "key.fill")
+                Label("外观", systemImage: "paintbrush.fill")
                     .font(.headline)
                     .foregroundStyle(Theme.brand)
 
-                credentialRow(label: "Bearer Token", text: $model.platformBearerDraft, height: 88)
+                Picker("主题", selection: $model.selectedTheme) {
+                    ForEach(AppThemeMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
 
-                Text("敏感信息保存到 macOS Keychain，不会上传到任何服务器。")
+                Text("选择“跟随系统”将自动适配macOS的深色/浅色模式。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    // MARK: - DeepSeek 凭证
+
+    private var deepSeekCredentialSection: some View {
+        SectionCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("DeepSeek 平台", systemImage: "key.fill")
+                        .font(.headline)
+                        .foregroundStyle(Theme.brand)
+                    Spacer()
+                    Toggle("", isOn: $model.deepSeekEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                if model.deepSeekEnabled {
+                    WarningToggles(selectedModes: $model.deepSeekWarningModes)
+
+                    thresholdRow(label: "余额预警阈值", text: $model.deepSeekBalanceWarningThresholdDraft)
+
+                    credentialRow(label: "Bearer Token", text: $model.platformBearerDraft, height: 88)
+
+                    Text("从 platform.deepseek.com 获取，敏感信息保存到 macOS Keychain，不会上传到任何服务器。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Mimo 凭证
+
+    private var mimoCredentialSection: some View {
+        SectionCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Mimo 平台", systemImage: "key.fill")
+                        .font(.headline)
+                        .foregroundStyle(Color(red: 1.00, green: 0.42, blue: 0.21)) // Mimo orange color
+                    Spacer()
+                    Toggle("", isOn: $model.mimoEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                if model.mimoEnabled {
+                    // 预警开关：仅展示当前计费模式对应的开关
+                    Toggle(isOn: Binding(
+                        get: { model.mimoWarningModes.contains(model.mimoBillingMode) },
+                        set: {
+                            if $0 {
+                                model.mimoWarningModes.insert(model.mimoBillingMode)
+                            } else {
+                                model.mimoWarningModes.remove(model.mimoBillingMode)
+                            }
+                        }
+                    )) {
+                        Text(model.mimoBillingMode.warningLabel)
+                            .foregroundStyle(.primary)
+                    }
+                    .toggleStyle(.checkbox)
+
+                    // 按量计费时显示余额阈值，Token Plan 时显示 90% 预警提示
+                    if model.mimoBillingMode == .payAsYouGo {
+                        thresholdRow(label: "余额预警阈值", text: $model.mimoBalanceWarningThresholdDraft)
+                    } else {
+                        Text("Token Plan 用量 ≥ 90% 时自动预警")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    // 计费模式选择
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("计费模式")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Picker("", selection: $model.mimoBillingMode) {
+                            Text("按量收费").tag(MimoBillingMode.payAsYouGo)
+                            Text("Token Plan").tag(MimoBillingMode.tokenPlan)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    credentialRow(label: "Cookie（完整字符串）", text: $model.mimoCookieDraft, height: 88)
+
+                    Text("从 platform.xiaomimimo.com 获取，在浏览器开发者工具中复制完整的 Cookie 字符串，敏感信息保存到 macOS Keychain。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
     }
@@ -122,54 +195,52 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - 预警
+    // MARK: - 通用设置
 
-    private var warningSection: some View {
+    private var generalSettingsSection: some View {
         SectionCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("菜单栏预警", systemImage: "exclamationmark.triangle.fill")
+            VStack(alignment: .leading, spacing: 10) {
+                Label("通用设置", systemImage: "gearshape.fill")
                     .font(.headline)
                     .foregroundStyle(Theme.brand)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("余额预警阈值")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            TextField("", text: $model.balanceWarningThresholdDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 72)
-                            Text("元")
-                                .foregroundStyle(.tertiary)
-                        }
+                HStack {
+                    Text("自动刷新间隔")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        TextField("", text: $model.autoRefreshMinutesDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 60)
+                        Text("分钟")
+                            .foregroundStyle(.tertiary)
                     }
-
-                    HStack {
-                        Text("自动刷新间隔")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            TextField("", text: $model.autoRefreshMinutesDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 60)
-                            Text("分钟")
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-
-                    Toggle(isOn: Binding(
-                        get: { model.launchAtLoginEnabled },
-                        set: { model.setLaunchAtLogin($0) }
-                    )) {
-                        Text("开机自动启动")
-                            .foregroundStyle(.primary)
-                    }
-                    .toggleStyle(.checkbox)
                 }
 
-                Text("余额低于阈值时，菜单栏图标和面板顶部会显示红色提醒。")
-                    .font(.caption)
+                Toggle(isOn: Binding(
+                    get: { model.launchAtLoginEnabled },
+                    set: { model.setLaunchAtLogin($0) }
+                )) {
+                    Text("开机自动启动")
+                        .foregroundStyle(.primary)
+                }
+                .toggleStyle(.checkbox)
+            }
+        }
+    }
+
+    // MARK: - 通用组件
+
+    private func thresholdRow(label: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.primary)
+            Spacer()
+            HStack(spacing: 4) {
+                TextField("", text: text)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 72)
+                Text("元")
                     .foregroundStyle(.tertiary)
             }
         }
@@ -186,14 +257,42 @@ struct SettingsView: View {
                     .font(.headline)
                     .foregroundStyle(Theme.brand)
 
-                if let usage = model.usageAmount {
-                    debugDisclosure(title: "Token 用量原始 JSON", json: usage.rawJSON)
+                // DeepSeek
+                if model.deepSeekEnabled {
+                    if let usage = model.usageAmount {
+                        debugDisclosure(title: "DeepSeek Token 用量原始 JSON", json: usage.rawJSON)
+                    }
+                    if let cost = model.usageCost {
+                        debugDisclosure(title: "DeepSeek 费用原始 JSON", json: cost.rawJSON)
+                    }
+                    if let summary = model.userSummary {
+                        debugDisclosure(title: "DeepSeek 账户摘要原始 JSON", json: summary.rawJSON)
+                    }
                 }
-                if let cost = model.usageCost {
-                    debugDisclosure(title: "费用原始 JSON", json: cost.rawJSON)
+
+                // Mimo
+                if model.mimoEnabled {
+                    if let balance = model.mimoBalance {
+                        debugDisclosure(title: "Mimo 账户余额原始 JSON", json: balance.rawJSON)
+                    }
+                    if let overview = model.mimoUsageOverview {
+                        debugDisclosure(title: "Mimo 使用概览原始 JSON", json: overview.rawJSON)
+                    }
+                    if let detail = model.mimoUsageDetailReport {
+                        debugDisclosure(title: "Mimo 按量详情原始 JSON", json: detail.rawJSON)
+                    }
+                    if let tokenPlan = model.mimoTokenPlanUsage {
+                        debugDisclosure(title: "Mimo Token Plan 使用原始 JSON", json: tokenPlan.rawJSON)
+                    }
+                    if let tokenPlanDetail = model.mimoTokenPlanDetailReport {
+                        debugDisclosure(title: "Mimo Token Plan 详情原始 JSON", json: tokenPlanDetail.rawJSON)
+                    }
                 }
-                if let summary = model.userSummary {
-                    debugDisclosure(title: "账户摘要原始 JSON", json: summary.rawJSON)
+
+                if !model.deepSeekEnabled && !model.mimoEnabled {
+                    Text("暂无调试数据")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
             }
         }

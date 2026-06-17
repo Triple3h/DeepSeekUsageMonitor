@@ -63,6 +63,7 @@ final class MenuBarManager: NSObject {
             rootView: AnyView(
                 DashboardView(onClose: { [weak self] in self?.closePanel() })
                     .environmentObject(model)
+                    .preferredColorScheme(model.selectedTheme.colorScheme)
                     .frame(width: Theme.panelWidth)
             )
         )
@@ -71,6 +72,7 @@ final class MenuBarManager: NSObject {
             contentViewController: hostingController,
             contentSize: NSSize(width: Theme.panelWidth, height: Theme.panelDashboardHeight)
         )
+        panel.appearance = model.selectedTheme.nsAppearance
     }
 
     func showPanel(button: NSStatusBarButton) {
@@ -185,12 +187,21 @@ final class MenuBarManager: NSObject {
                 self?.switchPanelContent(toSettings: isSettings)
             }
             .store(in: &cancellables)
+
+        // 主题切换
+        model.$selectedTheme
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] theme in
+                self?.applyTheme(theme)
+            }
+            .store(in: &cancellables)
     }
 
     private func switchPanelContent(toSettings: Bool) {
         let newRoot: AnyView = toSettings
-            ? AnyView(SettingsView().environmentObject(model).frame(width: Theme.panelWidth))
-            : AnyView(DashboardView(onClose: { [weak self] in self?.closePanel() }).environmentObject(model).frame(width: Theme.panelWidth))
+            ? AnyView(SettingsView().environmentObject(model).frame(width: Theme.panelWidth).preferredColorScheme(model.selectedTheme.colorScheme))
+            : AnyView(DashboardView(onClose: { [weak self] in self?.closePanel() }).environmentObject(model).frame(width: Theme.panelWidth).preferredColorScheme(model.selectedTheme.colorScheme))
 
         hostingController.rootView = newRoot
 
@@ -206,64 +217,128 @@ final class MenuBarManager: NSObject {
         updateStatusBarButton(button)
     }
 
+    // MARK: - Platform Logo Images
+
+    private static let deepseekLogo: NSImage? = {
+        Bundle.module.url(forResource: "deepseek-logo", withExtension: "png")
+            .flatMap { NSImage(contentsOf: $0) }
+    }()
+
+    private static let mimoLogo: NSImage? = {
+        Bundle.module.url(forResource: "mimo-logo", withExtension: "png")
+            .flatMap { NSImage(contentsOf: $0) }
+    }()
+
     // MARK: - Menu Bar Icon
 
     private var menuBarIcon: NSImage? {
-        // 复用原有的 icon 加载逻辑
-        let candidates: [URL] = {
-            var urls: [URL] = []
-            if let resourceURL = Bundle.main.resourceURL {
-                urls.append(resourceURL)
-                urls.append(resourceURL.appendingPathComponent("DeepSeekUsageMonitor_DeepSeekUsageMonitor.bundle"))
-            }
-            if let execURL = Bundle.main.executableURL {
-                urls.append(execURL.deletingLastPathComponent().appendingPathComponent("DeepSeekUsageMonitor_DeepSeekUsageMonitor.bundle"))
-            }
-            if let enumerator = FileManager.default.enumerator(at: Bundle.main.bundleURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-                for case let url as URL in enumerator {
-                    if url.pathExtension == "bundle" {
-                        urls.append(url)
-                    }
-                }
-            }
-            return urls
-        }()
-
-        for base in candidates {
-            let fileURL = base.appendingPathComponent("deepseek-logo.pdf")
-            if FileManager.default.fileExists(atPath: fileURL.path),
-               let image = NSImage(contentsOf: fileURL) {
-                image.isTemplate = true
-                image.size = Theme.menuBarIconSize
-                return image
-            }
+        guard let image = NSImage(systemSymbolName: "gauge.medium", accessibilityDescription: "AI 用量监控") else {
+            return nil
         }
-        return nil
+        image.isTemplate = true
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        return image.withSymbolConfiguration(config)
     }
 
     private func updateStatusBarButton(_ button: NSStatusBarButton) {
-        if model.isBalanceWarning {
-            if let warningImage = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: nil) {
-                warningImage.isTemplate = false
-                let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-                button.image = warningImage.withSymbolConfiguration(config)
-            }
-            button.title = menuBarBalanceText
-            button.imagePosition = .imageLeading
-            button.contentTintColor = .systemRed
+        button.image = menuBarIcon
+        button.attributedTitle = menuBarBalanceAttributedText
+        button.imagePosition = .imageLeading
+    }
+
+    /// 将 NSImage 缩放为菜单栏高度的 NSTextAttachment
+    private func logoAttachment(_ image: NSImage, height: CGFloat = 13) -> NSTextAttachment {
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        let aspect = image.size.width / max(image.size.height, 1)
+        attachment.bounds = NSRect(x: 0, y: -2, width: height * aspect, height: height)
+        return attachment
+    }
+
+    private func appendLogo(_ result: NSMutableAttributedString, image: NSImage?, fallback: String, attrs: [NSAttributedString.Key: Any]) {
+        if let image {
+            result.append(NSAttributedString(attachment: logoAttachment(image)))
         } else {
-            button.image = menuBarIcon
-            button.title = menuBarBalanceText
-            button.imagePosition = .imageLeading
-            button.contentTintColor = nil
+            result.append(NSAttributedString(string: fallback, attributes: attrs))
         }
     }
 
-    private var menuBarBalanceText: String {
-        guard let summary = model.userSummary else {
-            return " DeepSeek"
+    /// 构建菜单栏富文本：用 Logo 图标替代 DS / MIMO 文字
+    private var menuBarBalanceAttributedText: NSAttributedString {
+        let result = NSMutableAttributedString()
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.labelColor,
+        ]
+
+        let dsActive = model.deepSeekEnabled
+        let mimoActive = model.mimoEnabled
+        let sep = NSAttributedString(string: "  |  ", attributes: attrs)
+        let space = NSAttributedString(string: " ", attributes: attrs)
+
+        // ── 双平台 ──
+        if dsActive && mimoActive {
+            // DS 部分
+            if let s = model.userSummary {
+                appendLogo(result, image: Self.deepseekLogo, fallback: "DS", attrs: attrs)
+                result.append(NSAttributedString(string: " \(currencySymbol(s.primaryCurrency))\(money(s.totalBalance))", attributes: attrs))
+            } else {
+                appendLogo(result, image: Self.deepseekLogo, fallback: "DS", attrs: attrs)
+            }
+            result.append(sep)
+            // MIMO 部分
+            if let mimoText = mimoBalanceValue {
+                appendLogo(result, image: Self.mimoLogo, fallback: "MIMO", attrs: attrs)
+                result.append(NSAttributedString(string: " \(mimoText)", attributes: attrs))
+            } else {
+                appendLogo(result, image: Self.mimoLogo, fallback: "MIMO", attrs: attrs)
+            }
+            result.insert(space, at: 0)
+            return result
         }
-        return " \(currencySymbol(summary.primaryCurrency))\(money(summary.totalBalance))"
+
+        // ── 仅 DeepSeek ──
+        if dsActive {
+            result.append(space)
+            if let s = model.userSummary {
+                appendLogo(result, image: Self.deepseekLogo, fallback: "DS", attrs: attrs)
+                result.append(NSAttributedString(string: " \(currencySymbol(s.primaryCurrency))\(money(s.totalBalance))", attributes: attrs))
+            } else {
+                appendLogo(result, image: Self.deepseekLogo, fallback: " DeepSeek", attrs: attrs)
+            }
+            return result
+        }
+
+        // ── 仅 Mimo ──
+        if mimoActive {
+            result.append(space)
+            if let mimoText = mimoBalanceValue {
+                appendLogo(result, image: Self.mimoLogo, fallback: "MIMO", attrs: attrs)
+                result.append(NSAttributedString(string: " \(mimoText)", attributes: attrs))
+            } else {
+                appendLogo(result, image: Self.mimoLogo, fallback: " Mimo", attrs: attrs)
+            }
+            return result
+        }
+
+        return NSAttributedString(string: " AI Monitor", attributes: attrs)
+    }
+
+    /// Mimo 余额/Token 剩余纯文本（不含平台名前缀）
+    private var mimoBalanceValue: String? {
+        if model.mimoBillingMode == .tokenPlan {
+            if let usage = model.mimoTokenPlanUsage {
+                let remainingPercent = Int(((1 - usage.usagePercent) * 100).rounded())
+                return "\(remainingPercent)%"
+            }
+            return nil
+        } else {
+            if let b = model.mimoBalance {
+                return "\(currencySymbol(b.currency))\(money(b.availableBalance))"
+            }
+            return nil
+        }
     }
 
     private func currencySymbol(_ currency: String) -> String {
@@ -273,6 +348,13 @@ final class MenuBarManager: NSObject {
     private func money(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value)
         return String(format: "%.2f", number.doubleValue)
+    }
+
+    private func compactNumber(_ value: Int) -> String {
+        if value >= 1_000_000_000 { return String(format: "%.1fB", Double(value) / 1_000_000_000) }
+        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.1fK", Double(value) / 1_000) }
+        return value.formatted()
     }
 
     // MARK: - Panel Resize
@@ -318,5 +400,13 @@ final class MenuBarManager: NSObject {
             button.target = nil
         }
         NSStatusBar.system.removeStatusItem(statusItem)
+    }
+
+    // MARK: - Theme
+
+    private func applyTheme(_ theme: AppThemeMode) {
+        panel.appearance = theme.nsAppearance
+        // 重新应用 SwiftUI 视图以更新 preferredColorScheme
+        switchPanelContent(toSettings: model.isSettingsShown)
     }
 }

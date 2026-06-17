@@ -1,3 +1,4 @@
+import AppKit
 import DeepSeekUsageMonitorCore
 import SwiftUI
 
@@ -13,23 +14,24 @@ struct ModelDistributionView: View {
 
     private let muted = Color.secondary
 
+    private var sortedModels: [UsageModelAmount] {
+        models.sorted { $0.totalTokens > $1.totalTokens }
+    }
+
     var body: some View {
         VStack(spacing: 8) {
-            ForEach(Array(models.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(sortedModels.enumerated()), id: \.element.id) { index, item in
                 modelRow(item, index: index)
                 modelUsageBar(item, index: index)
-                    .padding(.bottom, index == models.count - 1 ? 0 : 4)
+                    .padding(.bottom, index == sortedModels.count - 1 ? 0 : 4)
             }
         }
     }
 
     private func modelRow(_ item: UsageModelAmount, index: Int) -> some View {
         HStack(spacing: 10) {
-            Text(modelBadge(item.model, index))
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+            platformLogo(for: item.model, index: index)
                 .frame(width: 28, height: 28)
-                .foregroundStyle(modelColor(item.model, index))
-                .background(modelColor(item.model, index).opacity(0.16))
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
@@ -87,5 +89,37 @@ struct ModelDistributionView: View {
     private func cacheHitRatio(for item: UsageModelAmount) -> Double {
         guard item.totalTokens > 0 else { return 0 }
         return Double(item.promptCacheHitTokens) / Double(item.totalTokens)
+    }
+
+    // MARK: - Platform Logo
+
+    private static let deepseekNSImage: NSImage? = {
+        Bundle.module.url(forResource: "deepseek-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    }()
+
+    private static let mimoNSImage: NSImage? = {
+        Bundle.module.url(forResource: "mimo-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    }()
+
+    @ViewBuilder
+    private func platformLogo(for modelName: String, index: Int) -> some View {
+        let lower = modelName.lowercased()
+        if lower.contains("deepseek"), let nsImg = Self.deepseekNSImage {
+            Image(nsImage: nsImg)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding(2)
+        } else if lower.contains("mimo"), let nsImg = Self.mimoNSImage {
+            Image(nsImage: nsImg)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+        } else {
+            // 回退到文字徽章
+            Text(modelBadge(modelName, index))
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(modelColor(modelName, index))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(modelColor(modelName, index).opacity(0.16))
+        }
     }
 }

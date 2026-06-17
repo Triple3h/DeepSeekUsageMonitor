@@ -14,5 +14,6 @@ struct WarningBanner: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(Color.orange.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
