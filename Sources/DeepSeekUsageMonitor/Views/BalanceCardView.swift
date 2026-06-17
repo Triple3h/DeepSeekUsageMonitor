@@ -196,15 +196,31 @@ struct BalanceCardView: View {
 struct PlatformRowView: View {
     let row: BalanceCardView.PlatformBalanceRow
 
+    private static let deepseekNSImage: NSImage? = {
+        Bundle.module.url(forResource: "deepseek-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    }()
+
+    private static let mimoNSImage: NSImage? = {
+        Bundle.module.url(forResource: "mimo-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    }()
+
     var body: some View {
         HStack(spacing: 10) {
             // 平台图标
-            Text(row.shortLabel)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(row.accentColor)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            if let nsImg = platformImage {
+                Image(nsImage: nsImg)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            } else {
+                Text(row.shortLabel)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(row.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.name)
@@ -227,14 +243,7 @@ struct PlatformRowView: View {
                 }
 
                 // 明细标签
-                if !row.details.isEmpty {
-                    HStack(spacing: 0) {
-                        ForEach(row.details) { detail in
-                            DetailLabel(title: detail.title, value: detail.value)
-                                .frame(maxWidth: .infinity, alignment: detail.title.isEmpty ? .center : .leading)
-                        }
-                    }
-                }
+                detailLabels
             }
 
             Spacer()
@@ -282,6 +291,24 @@ struct PlatformRowView: View {
         .padding(.vertical, 10)
         .background(Color.primary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var platformImage: NSImage? {
+        switch row.id {
+        case "deepseek": return Self.deepseekNSImage
+        case "mimo_payg", "mimo_token_plan": return Self.mimoNSImage
+        default: return nil
+        }
+    }
+
+    private var detailLabels: some View {
+        let n = row.details.count
+        return HStack(spacing: 0) {
+            ForEach(0..<n, id: \.self) { idx in
+                DetailLabel(title: row.details[idx].title, value: row.details[idx].value)
+                    .frame(maxWidth: .infinity, alignment: idx == 0 ? .leading : (idx == n - 1 ? .trailing : .center))
+            }
+        }
     }
 }
 

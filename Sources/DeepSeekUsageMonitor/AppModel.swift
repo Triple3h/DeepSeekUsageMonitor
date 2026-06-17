@@ -98,6 +98,25 @@ final class AppModel: ObservableObject {
         return totalBalanceValue < balanceWarningThreshold
     }
 
+    /// Mimo 可用余额数值（未启用或无数据时为 nil）
+    var mimoBalanceValue: Double? {
+        guard mimoEnabled, let balance = mimoBalance else { return nil }
+        return balance.availableBalance.doubleValue
+    }
+
+    /// 任意已启用平台余额低于阈值时返回 true
+    var isAnyBalanceWarning: Bool {
+        if deepSeekEnabled, let v = totalBalanceValue, v < balanceWarningThreshold { return true }
+        if mimoEnabled {
+            if mimoBillingMode == .tokenPlan, let usage = mimoTokenPlanUsage, usage.usagePercent >= 90 {
+                return true
+            } else if let v = mimoBalanceValue, v < balanceWarningThreshold {
+                return true
+            }
+        }
+        return false
+    }
+
     var platformCredentialStatus: PlatformCredentialStatus {
         return PlatformCredentialStatus(
             hasBearerToken: savedBearerToken.isEmpty == false

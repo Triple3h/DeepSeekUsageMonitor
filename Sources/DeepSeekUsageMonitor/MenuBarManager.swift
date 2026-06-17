@@ -220,40 +220,16 @@ final class MenuBarManager: NSObject {
     // MARK: - Menu Bar Icon
 
     private var menuBarIcon: NSImage? {
-        // 复用原有的 icon 加载逻辑
-        let candidates: [URL] = {
-            var urls: [URL] = []
-            if let resourceURL = Bundle.main.resourceURL {
-                urls.append(resourceURL)
-                urls.append(resourceURL.appendingPathComponent("DeepSeekUsageMonitor_DeepSeekUsageMonitor.bundle"))
-            }
-            if let execURL = Bundle.main.executableURL {
-                urls.append(execURL.deletingLastPathComponent().appendingPathComponent("DeepSeekUsageMonitor_DeepSeekUsageMonitor.bundle"))
-            }
-            if let enumerator = FileManager.default.enumerator(at: Bundle.main.bundleURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-                for case let url as URL in enumerator {
-                    if url.pathExtension == "bundle" {
-                        urls.append(url)
-                    }
-                }
-            }
-            return urls
-        }()
-
-        for base in candidates {
-            let fileURL = base.appendingPathComponent("deepseek-logo.pdf")
-            if FileManager.default.fileExists(atPath: fileURL.path),
-               let image = NSImage(contentsOf: fileURL) {
-                image.isTemplate = true
-                image.size = Theme.menuBarIconSize
-                return image
-            }
+        guard let image = NSImage(systemSymbolName: "gauge.medium", accessibilityDescription: "AI 用量监控") else {
+            return nil
         }
-        return nil
+        image.isTemplate = true
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        return image.withSymbolConfiguration(config)
     }
 
     private func updateStatusBarButton(_ button: NSStatusBarButton) {
-        if model.isBalanceWarning {
+        if model.isAnyBalanceWarning {
             if let warningImage = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: nil) {
                 warningImage.isTemplate = false
                 let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
@@ -271,10 +247,53 @@ final class MenuBarManager: NSObject {
     }
 
     private var menuBarBalanceText: String {
-        guard let summary = model.userSummary else {
-            return " DeepSeek"
+        let dsActive = model.deepSeekEnabled
+        let mimoActive = model.mimoEnabled
+
+        // 双平台：分别展示各自余额
+        if dsActive && mimoActive {
+            let dsPart: String?
+            if let s = model.userSummary {
+                dsPart = "DS \(currencySymbol(s.primaryCurrency))\(money(s.totalBalance))"
+            } else { dsPart = nil }
+
+            let mimoPart = mimoMenuBarText
+
+            if let dsPart, let mimoPart { return " \(dsPart) | \(mimoPart)" }
+            if let dsPart { return " \(dsPart) | MIMO" }
+            if let mimoPart { return " DS | \(mimoPart)" }
+            return " DS | MIMO"
         }
-        return " \(currencySymbol(summary.primaryCurrency))\(money(summary.totalBalance))"
+
+        // 仅 DeepSeek
+        if dsActive {
+            guard let s = model.userSummary else { return " DeepSeek" }
+            return " \(currencySymbol(s.primaryCurrency))\(money(s.totalBalance))"
+        }
+
+        // 仅 Mimo
+        if mimoActive {
+            guard let part = mimoMenuBarText else { return " Mimo" }
+            return " \(part)"
+        }
+
+        return " AI Monitor"
+    }
+
+    /// Mimo 平台菜单栏展示文本（按计费模式决定展示余额还是 Token 剩余）
+    private var mimoMenuBarText: String? {
+        if model.mimoBillingMode == .tokenPlan {
+            if let usage = model.mimoTokenPlanUsage {
+                let remainingPercent = Int((100 - usage.usagePercent).rounded())
+                return "MIMO \(remainingPercent)%"
+            }
+            return nil
+        } else {
+            if let b = model.mimoBalance {
+                return "MIMO \(currencySymbol(b.currency))\(money(b.availableBalance))"
+            }
+            return nil
+        }
     }
 
     private func currencySymbol(_ currency: String) -> String {
@@ -284,6 +303,13 @@ final class MenuBarManager: NSObject {
     private func money(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value)
         return String(format: "%.2f", number.doubleValue)
+    }
+
+    private func compactNumber(_ value: Int) -> String {
+        if value >= 1_000_000_000 { return String(format: "%.1fB", Double(value) / 1_000_000_000) }
+        if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.1fK", Double(value) / 1_000) }
+        return value.formatted()
     }
 
     // MARK: - Panel Resize

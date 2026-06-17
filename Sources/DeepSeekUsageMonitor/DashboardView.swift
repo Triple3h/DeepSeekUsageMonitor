@@ -9,7 +9,7 @@ struct DashboardView: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            if model.isBalanceWarning {
+            if model.isAnyBalanceWarning {
                 WarningBanner(threshold: model.balanceWarningThreshold)
             }
             HeaderView()
@@ -448,12 +448,18 @@ struct DashboardView: View {
         return "M\(index + 1)"
     }
 
+    /// 模型对应的 SF Symbol 图标名，nil 表示使用纯文字徽章
+    private func modelBadgeSymbol(_ modelName: String) -> String? {
+        let lower = modelName.lowercased()
+        if lower.contains("flash") { return "bolt.fill" }
+        if lower.contains("pro") { return "star.fill" }
+        if lower.contains("reasoner") || lower.contains("r1") { return "sparkles" }
+        if lower.contains("mimo") { return "flame.fill" }
+        return nil
+    }
+
     private func modelShortName(_ modelName: String) -> String {
-        modelName
-            .replacingOccurrences(of: "deepseek-", with: "")
-            .replacingOccurrences(of: "deepseek_", with: "")
-            .replacingOccurrences(of: "mimo-", with: "")
-            .replacingOccurrences(of: "mimo_", with: "")
+        modelBadge(modelName, index: 0)
     }
 
     private func compactNumber(_ value: Int) -> String {
