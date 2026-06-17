@@ -220,12 +220,12 @@ final class MenuBarManager: NSObject {
     // MARK: - Platform Logo Images
 
     private static let deepseekLogo: NSImage? = {
-        Bundle.module.url(forResource: "deepseek-logo", withExtension: "png")
+        ResourceBundle.url(forResource: "deepseek-logo", withExtension: "png")
             .flatMap { NSImage(contentsOf: $0) }
     }()
 
     private static let mimoLogo: NSImage? = {
-        Bundle.module.url(forResource: "mimo-logo", withExtension: "png")
+        ResourceBundle.url(forResource: "mimo-logo", withExtension: "png")
             .flatMap { NSImage(contentsOf: $0) }
     }()
 

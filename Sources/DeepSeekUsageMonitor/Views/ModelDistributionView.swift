@@ -94,11 +94,11 @@ struct ModelDistributionView: View {
     // MARK: - Platform Logo
 
     private static let deepseekNSImage: NSImage? = {
-        Bundle.module.url(forResource: "deepseek-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+        ResourceBundle.url(forResource: "deepseek-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
     }()
 
     private static let mimoNSImage: NSImage? = {
-        Bundle.module.url(forResource: "mimo-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+        ResourceBundle.url(forResource: "mimo-logo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
     }()
 
     @ViewBuilder
