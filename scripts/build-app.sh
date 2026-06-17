@@ -23,8 +23,56 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 # Copy binary
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/"
 
-# Copy SPM resource bundle
+# Copy SPM resource bundle to Contents/Resources (standard location)
 cp -R "${BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle" "${APP_BUNDLE}/Contents/Resources/"
+
+# Also copy to .app root (SPM Bundle.module searches here too)
+cp -R "${BUILD_DIR}/${APP_NAME}_${APP_NAME}.bundle" "${APP_BUNDLE}/"
+
+# Ensure SPM resource bundle contains Info.plist (required for Bundle.module)
+RESOURCE_BUNDLE="${APP_BUNDLE}/Contents/Resources/${APP_NAME}_${APP_NAME}.bundle"
+RESOURCE_BUNDLE_ROOT="${APP_BUNDLE}/${APP_NAME}_${APP_NAME}.bundle"
+
+create_resource_info_plist() {
+    local bundle_dir=$1
+    if [ ! -f "${bundle_dir}/Contents/Info.plist" ]; then
+        echo "Creating Info.plist for resource bundle at ${bundle_dir}..."
+        mkdir -p "${bundle_dir}/Contents/Resources"
+        cat > "${bundle_dir}/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>\$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.deepseekusagemonitor.${APP_NAME}-resources</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>${APP_NAME} Resources</string>
+    <key>CFBundlePackageType</key>
+    <string>BNDL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+</dict>
+</plist>
+EOF
+        # Move resources into Contents/Resources if they are at bundle root
+        if [ -f "${bundle_dir}/deepseek-logo.png" ]; then
+            mv "${bundle_dir}/deepseek-logo.png" "${bundle_dir}/Contents/Resources/"
+            mv "${bundle_dir}/mimo-logo.png" "${bundle_dir}/Contents/Resources/"
+            echo "Moved resources into Contents/Resources"
+        fi
+    fi
+}
+
+create_resource_info_plist "${RESOURCE_BUNDLE}"
+create_resource_info_plist "${RESOURCE_BUNDLE_ROOT}"
 
 # Copy Info.plist and inject version from VERSION file
 cp "scripts/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
