@@ -926,3 +926,42 @@ extension MimoTokenPlanDetailReport {
         }
     }
 }
+
+// MARK: - Cacheable Report Protocol
+
+/// 平台标识符常量
+public enum CachePlatform {
+    public static let deepseek = "deepseek"
+    public static let mimo = "mimo"
+}
+
+/// 可缓存报告协议 - 实现此协议即可自动支持缓存
+public protocol CacheableReport: Codable {
+    /// 平台标识符，用于创建缓存目录
+    static var platformIdentifier: String { get }
+
+    /// 数据类型标识符，用于构建缓存文件名
+    static var dataTypeIdentifier: String { get }
+}
+
+// MARK: - CacheableReport Implementations
+
+extension UsageAmountReport: CacheableReport {
+    public static var platformIdentifier: String { CachePlatform.deepseek }
+    public static var dataTypeIdentifier: String { "usage" }
+}
+
+extension UsageCostReport: CacheableReport {
+    public static var platformIdentifier: String { CachePlatform.deepseek }
+    public static var dataTypeIdentifier: String { "cost" }
+}
+
+extension MimoUsageDetailReport: CacheableReport {
+    public static var platformIdentifier: String { CachePlatform.mimo }
+    public static var dataTypeIdentifier: String { "usage_detail" }
+}
+
+extension MimoTokenPlanDetailReport: CacheableReport {
+    public static var platformIdentifier: String { CachePlatform.mimo }
+    public static var dataTypeIdentifier: String { "token_plan_detail" }
+}
