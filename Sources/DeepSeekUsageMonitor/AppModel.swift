@@ -266,9 +266,9 @@ final class AppModel: ObservableObject {
         // DeepSeek 平台
         if deepSeekEnabled {
             // Show cached data immediately if available and not stale
-            if cacheStore.isCacheValid(month: selectedMonth, year: selectedYear, maxAge: cacheMaxAge) {
-                if usageAmount == nil { usageAmount = cacheStore.loadUsage(month: selectedMonth, year: selectedYear) }
-                if usageCost == nil { usageCost = cacheStore.loadCost(month: selectedMonth, year: selectedYear) }
+            if cacheStore.isValid(UsageAmountReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge) {
+                if usageAmount == nil { usageAmount = cacheStore.load(UsageAmountReport.self, year: selectedYear, month: selectedMonth) }
+                if usageCost == nil { usageCost = cacheStore.load(UsageCostReport.self, year: selectedYear, month: selectedMonth) }
             }
 
             do {
@@ -289,8 +289,8 @@ final class AppModel: ObservableObject {
                 usageAmount = newUsage
                 usageCost = newCost
                 userSummary = try await summary
-                cacheStore.save(usage: newUsage, month: selectedMonth, year: selectedYear)
-                cacheStore.save(cost: newCost, month: selectedMonth, year: selectedYear)
+                cacheStore.save(newUsage, year: selectedYear, month: selectedMonth)
+                cacheStore.save(newCost, year: selectedYear, month: selectedMonth)
             } catch {
                 // If network fails but we have cached data, keep it and show a subtle message
                 if usageAmount != nil || usageCost != nil {
@@ -353,9 +353,9 @@ final class AppModel: ObservableObject {
         let (month, year) = previousMonthForLast7Days
 
         // Try cache first
-        if cacheStore.isCacheValid(month: month, year: year, maxAge: 604800) {
-            previousMonthUsageAmount = cacheStore.loadUsage(month: month, year: year)
-            previousMonthUsageCost = cacheStore.loadCost(month: month, year: year)
+        if cacheStore.isValid(UsageAmountReport.self, year: year, month: month, maxAge: 604800) {
+            previousMonthUsageAmount = cacheStore.load(UsageAmountReport.self, year: year, month: month)
+            previousMonthUsageCost = cacheStore.load(UsageCostReport.self, year: year, month: month)
         }
 
         // Skip network if cache is fresh
@@ -379,8 +379,8 @@ final class AppModel: ObservableObject {
             let newCost = try await cost
             previousMonthUsageAmount = newUsage
             previousMonthUsageCost = newCost
-            cacheStore.save(usage: newUsage, month: month, year: year)
-            cacheStore.save(cost: newCost, month: month, year: year)
+            cacheStore.save(newUsage, year: year, month: month)
+            cacheStore.save(newCost, year: year, month: month)
         } catch {
             // Silently fail; previous month data is best-effort for last-7-days view
         }
