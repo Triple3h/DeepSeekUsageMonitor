@@ -4,7 +4,7 @@ This file provides guidance to Qoder (qoder.com) when working with code in this 
 
 ## Project Overview
 
-macOS menu bar app (Swift/SwiftUI, SPM-only, no Xcode project) that monitors DeepSeek platform usage and balance by calling internal web endpoints. Credentials stored in macOS Keychain.
+macOS menu bar app (Swift/SwiftUI, SPM-only, no Xcode project) that monitors DeepSeek & MIMO platform usage and balance by calling internal web endpoints. Credentials stored in macOS Keychain.
 
 ## Build & Run
 
@@ -28,10 +28,10 @@ Debug mode reads Bearer Token from env var `DEEPSEEK_BEARER` if Keychain is empt
 
 ## Versioning & Release
 
-`VERSION` file at repo root is the single source of truth for semver (e.g. `1.0.0`).
+`VERSION` file at repo root is the single source of truth for semver (e.g. `1.1.0`).
 
 - `build-app.sh` reads `VERSION` and injects it into `CFBundleShortVersionString` in the bundled Info.plist
-- Pushing to `main` triggers `.github/workflows/release.yml` on `macos-14` runner
+- Pushing to `master` triggers `.github/workflows/release.yml` on `macos-14` runner
 - Workflow creates tag `v{VERSION}`, builds DMG named `DeepSeekUsageMonitor-v{VERSION}.dmg`, and publishes a GitHub Release
 - If the tag already exists, the workflow skips (no duplicate releases)
 - To release: bump `VERSION` (e.g. `1.0.0` → `1.0.1` for patches, `1.0.1` → `1.1.0` for features) and push
@@ -40,8 +40,8 @@ Debug mode reads Bearer Token from env var `DEEPSEEK_BEARER` if Keychain is empt
 
 ### Module Split (SPM)
 
-- **`DeepSeekUsageMonitorCore`** (library): `PlatformSummaryClient` (network), `KeychainStore`, `UsageCSVParser`, `TokenEstimator`, `UsageCacheStore`, `Models`
-- **`DeepSeekUsageMonitor`** (executable, depends on Core): SwiftUI app, views, window controllers. Bundles `Resources/deepseek-logo.pdf` as SPM resource
+- **`DeepSeekUsageMonitorCore`** (library): `PlatformSummaryClient` (DeepSeek network), `MimoClient` (MIMO network), `KeychainStore`, `UsageCSVParser`, `TokenEstimator`, `UsageCacheStore`, `Models`
+- **`DeepSeekUsageMonitor`** (executable, depends on Core): SwiftUI app, views, window controllers. Bundles `Resources/deepseek-logo.png` and `mimo-logo.png` as SPM resources
 
 ### App Lifecycle
 
@@ -55,7 +55,7 @@ Debug mode reads Bearer Token from env var `DEEPSEEK_BEARER` if Keychain is empt
 
 ### Data Flow
 
-`AppModel` → `PlatformSummaryClient` (3 internal endpoints at `platform.deepseek.com/api/v0/...`) → results published to SwiftUI views. `UsageCacheStore` caches to disk (1h for current month, 7d for history). `KeychainStore` persists bearer token via macOS Security framework.
+`AppModel` → `PlatformSummaryClient` (3 internal endpoints at `platform.deepseek.com/api/v0/...`) for DeepSeek, `MimoClient` (5 endpoints at `platform.xiaomimimo.com/api/v1/...`) for MIMO → results published to SwiftUI views. `UsageCacheStore` caches to disk (1h for current month, 7d for history). `KeychainStore` persists bearer token via macOS Security framework.
 
 ### UI Structure
 
@@ -63,7 +63,7 @@ Debug mode reads Bearer Token from env var `DEEPSEEK_BEARER` if Keychain is empt
 
 ### Design System
 
-`Theme.swift` centralizes brand colors (#4D6BFE), gradients, panel dimensions, card backgrounds (dark/light adaptive), font tokens, and `ViewModifier` helpers (`.themeCard()`, `.themeTint()`).
+`Theme.swift` centralizes brand colors (#4D6BFE), gradients, panel dimensions, card backgrounds (dark/light adaptive), font tokens, and `ViewModifier` helpers (`.themeCard()`, `.themeTint()`). `AppThemeMode` enum supports system/dark/light theme switching.
 
 ### Warning System & Extensibility
 
