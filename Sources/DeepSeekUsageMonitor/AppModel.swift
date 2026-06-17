@@ -57,6 +57,11 @@ final class AppModel: ObservableObject {
         selectedYear = components.year ?? 2026
         loadSavedCredentials()
         startBackgroundRefresh()
+
+        // 启动时立即刷新一次
+        Task {
+            await refreshAll()
+        }
     }
 
     // 平台枚举
