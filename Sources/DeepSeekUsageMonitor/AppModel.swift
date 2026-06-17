@@ -47,6 +47,10 @@ final class AppModel: ObservableObject {
     private let cacheStore = UsageCacheStore()
     private var backgroundRefreshTask: Task<Void, Never>?
 
+    // 缓存已保存的 credential，避免每次刷新都访问 Keychain
+    private var savedBearerToken: String = ""
+    private var savedMimoCookie: String = ""
+
     init() {
         let components = Calendar.current.dateComponents([.year, .month], from: Date())
         selectedMonth = components.month ?? 1
@@ -90,15 +94,13 @@ final class AppModel: ObservableObject {
     }
 
     var platformCredentialStatus: PlatformCredentialStatus {
-        let token = (try? keychain.read(.platformBearerToken)) ?? nil
         return PlatformCredentialStatus(
-            hasBearerToken: token?.isEmpty == false
+            hasBearerToken: savedBearerToken.isEmpty == false
         )
     }
 
     var mimoCredentialStatus: Bool {
-        let cookie = (try? keychain.read(.mimoCookie)) ?? nil
-        return cookie?.isEmpty == false
+        return savedMimoCookie.isEmpty == false
     }
 
     /// 各启用平台本月花费之和（只加花费，不混入余额）
@@ -155,6 +157,10 @@ final class AppModel: ObservableObject {
                let theme = AppThemeMode(rawValue: themeString) {
                 selectedTheme = theme
             }
+
+            // 缓存已保存的 credential，刷新时直接使用
+            savedBearerToken = platformBearerDraft
+            savedMimoCookie = mimoCookieDraft
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -171,6 +177,10 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(mimoEnabled, forKey: "mimoEnabled")
             UserDefaults.standard.set(mimoBillingMode.rawValue, forKey: "mimoBillingMode")
             UserDefaults.standard.set(selectedTheme.rawValue, forKey: "selectedTheme")
+
+            // 更新缓存的 credential
+            savedBearerToken = platformBearerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            savedMimoCookie = mimoCookieDraft.trimmingCharacters(in: .whitespacesAndNewlines)
 
             if previousRefreshMinutes != autoRefreshMinutesDraft {
                 startBackgroundRefresh()
@@ -218,8 +228,7 @@ final class AppModel: ObservableObject {
         // DeepSeek 平台
         if deepSeekEnabled {
             do {
-                let bearer = try keychain.read(.platformBearerToken) ?? ""
-                userSummary = try await platformClient.fetchUserSummary(bearerToken: bearer)
+                userSummary = try await platformClient.fetchUserSummary(bearerToken: savedBearerToken)
             } catch {
                 errors.append("DeepSeek: \(error.localizedDescription)")
             }
@@ -227,16 +236,15 @@ final class AppModel: ObservableObject {
 
         // Mimo 平台（余额两个模式都需要，按模式决定 fetch 用量/套餐）
         if mimoEnabled {
-            let cookieString = (try? keychain.read(.mimoCookie)) ?? ""
             // 并行 fetch，各接口独立处理错误
-            async let balanceResult = mimoClient.fetchBalance(cookieString: cookieString)
+            async let balanceResult = mimoClient.fetchBalance(cookieString: savedMimoCookie)
             if mimoBillingMode == .payAsYouGo {
-                async let overviewResult = mimoClient.fetchUsageOverview(cookieString: cookieString)
+                async let overviewResult = mimoClient.fetchUsageOverview(cookieString: savedMimoCookie)
                 do { mimoUsageOverview = try await overviewResult } catch {
                     errors.append("Mimo 用量: \(error.localizedDescription)")
                 }
             } else {
-                async let tokenPlanResult = mimoClient.fetchTokenPlanUsage(cookieString: cookieString)
+                async let tokenPlanResult = mimoClient.fetchTokenPlanUsage(cookieString: savedMimoCookie)
                 do { mimoTokenPlanUsage = try await tokenPlanResult } catch {
                     errors.append("Mimo 套餐: \(error.localizedDescription)")
                 }
@@ -274,18 +282,17 @@ final class AppModel: ObservableObject {
             }
 
             do {
-                let bearer = try keychain.read(.platformBearerToken) ?? ""
                 async let usage = platformClient.fetchUsageAmount(
                     month: selectedMonth,
                     year: selectedYear,
-                    bearerToken: bearer
+                    bearerToken: savedBearerToken
                 )
                 async let cost = platformClient.fetchUsageCost(
                     month: selectedMonth,
                     year: selectedYear,
-                    bearerToken: bearer
+                    bearerToken: savedBearerToken
                 )
-                async let summary = platformClient.fetchUserSummary(bearerToken: bearer)
+                async let summary = platformClient.fetchUserSummary(bearerToken: savedBearerToken)
                 let newUsage = try await usage
                 let newCost = try await cost
                 usageAmount = newUsage
@@ -305,9 +312,8 @@ final class AppModel: ObservableObject {
 
         // Mimo 平台（余额两个模式都要，详情按模式决定）
         if mimoEnabled {
-            let cookieString = (try? keychain.read(.mimoCookie)) ?? ""
-            async let balanceResult = mimoClient.fetchBalance(cookieString: cookieString)
-            async let overviewResult = mimoClient.fetchUsageOverview(cookieString: cookieString)
+            async let balanceResult = mimoClient.fetchBalance(cookieString: savedMimoCookie)
+            async let overviewResult = mimoClient.fetchUsageOverview(cookieString: savedMimoCookie)
 
             do { mimoBalance = try await balanceResult } catch {
                 errors.append("Mimo 余额: \(error.localizedDescription)")
@@ -324,7 +330,7 @@ final class AppModel: ObservableObject {
 
                 do {
                     let detail = try await mimoClient.fetchUsageDetailList(
-                        month: selectedMonth, year: selectedYear, cookieString: cookieString)
+                        month: selectedMonth, year: selectedYear, cookieString: savedMimoCookie)
                     mimoUsageDetailReport = detail
                     cacheStore.save(detail, year: selectedYear, month: selectedMonth)
                 } catch {
@@ -345,11 +351,11 @@ final class AppModel: ObservableObject {
                     mimoTokenPlanDetailReport = cacheStore.loadIfValid(MimoTokenPlanDetailReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge)
                 }
 
-                async let tpResult = mimoClient.fetchTokenPlanUsage(cookieString: cookieString)
+                async let tpResult = mimoClient.fetchTokenPlanUsage(cookieString: savedMimoCookie)
 
                 do {
                     let detail = try await mimoClient.fetchTokenPlanDetailList(
-                        month: selectedMonth, year: selectedYear, cookieString: cookieString)
+                        month: selectedMonth, year: selectedYear, cookieString: savedMimoCookie)
                     mimoTokenPlanDetailReport = detail
                     cacheStore.save(detail, year: selectedYear, month: selectedMonth)
                 } catch {
@@ -399,16 +405,15 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            let bearer = try keychain.read(.platformBearerToken) ?? ""
             async let usage = platformClient.fetchUsageAmount(
                 month: month,
                 year: year,
-                bearerToken: bearer
+                bearerToken: savedBearerToken
             )
             async let cost = platformClient.fetchUsageCost(
                 month: month,
                 year: year,
-                bearerToken: bearer
+                bearerToken: savedBearerToken
             )
             let newUsage = try await usage
             let newCost = try await cost
