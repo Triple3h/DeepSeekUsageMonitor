@@ -317,20 +317,55 @@ final class AppModel: ObservableObject {
             }
 
             if mimoBillingMode == .payAsYouGo {
-                async let detailResult = mimoClient.fetchUsageDetailList(
-                    month: selectedMonth, year: selectedYear, cookieString: cookieString)
-                do { mimoUsageDetailReport = try await detailResult } catch {
-                    errors.append("Mimo 按量详情: \(error.localizedDescription)")
+                // 先尝试加载缓存
+                if mimoUsageDetailReport == nil {
+                    mimoUsageDetailReport = cacheStore.loadIfValid(MimoUsageDetailReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge)
+                }
+
+                do {
+                    let detail = try await mimoClient.fetchUsageDetailList(
+                        month: selectedMonth, year: selectedYear, cookieString: cookieString)
+                    mimoUsageDetailReport = detail
+                    cacheStore.save(detail, year: selectedYear, month: selectedMonth)
+                } catch {
+                    // 网络失败时：如果已有缓存数据，显示警告；否则尝试加载任何缓存
+                    if mimoUsageDetailReport != nil {
+                        errors.append("Mimo 按量详情: \(error.localizedDescription)（已显示缓存数据）")
+                    } else if let cached = cacheStore.load(MimoUsageDetailReport.self, year: selectedYear, month: selectedMonth) {
+                        mimoUsageDetailReport = cached
+                        statusMessage = "已显示缓存数据"
+                    } else {
+                        errors.append("Mimo 按量详情: \(error.localizedDescription)")
+                    }
                 }
             } else {
+                // Token Plan 模式
+                // 先尝试加载缓存
+                if mimoTokenPlanDetailReport == nil {
+                    mimoTokenPlanDetailReport = cacheStore.loadIfValid(MimoTokenPlanDetailReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge)
+                }
+
                 async let tpResult = mimoClient.fetchTokenPlanUsage(cookieString: cookieString)
-                async let tpDetailResult = mimoClient.fetchTokenPlanDetailList(
-                    month: selectedMonth, year: selectedYear, cookieString: cookieString)
+
+                do {
+                    let detail = try await mimoClient.fetchTokenPlanDetailList(
+                        month: selectedMonth, year: selectedYear, cookieString: cookieString)
+                    mimoTokenPlanDetailReport = detail
+                    cacheStore.save(detail, year: selectedYear, month: selectedMonth)
+                } catch {
+                    // 网络失败时：如果已有缓存数据，显示警告；否则尝试加载任何缓存
+                    if mimoTokenPlanDetailReport != nil {
+                        errors.append("Mimo 套餐详情: \(error.localizedDescription)（已显示缓存数据）")
+                    } else if let cached = cacheStore.load(MimoTokenPlanDetailReport.self, year: selectedYear, month: selectedMonth) {
+                        mimoTokenPlanDetailReport = cached
+                        statusMessage = "已显示缓存数据"
+                    } else {
+                        errors.append("Mimo 套餐详情: \(error.localizedDescription)")
+                    }
+                }
+
                 do { mimoTokenPlanUsage = try await tpResult } catch {
                     errors.append("Mimo 套餐概览: \(error.localizedDescription)")
-                }
-                do { mimoTokenPlanDetailReport = try await tpDetailResult } catch {
-                    errors.append("Mimo 套餐详情: \(error.localizedDescription)")
                 }
             }
         }
