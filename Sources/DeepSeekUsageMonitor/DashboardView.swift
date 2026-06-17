@@ -10,7 +10,7 @@ struct DashboardView: View {
     var body: some View {
         VStack(spacing: 10) {
             if model.isAnyBalanceWarning {
-                WarningBanner(threshold: model.balanceWarningThreshold)
+                WarningBanner(threshold: model.displayWarningThreshold)
             }
             HeaderView()
             SectionCard {

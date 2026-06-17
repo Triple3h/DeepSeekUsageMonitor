@@ -51,7 +51,7 @@ struct SettingsView: View {
                 appearanceSection
                 deepSeekCredentialSection
                 mimoCredentialSection
-                warningSection
+                generalSettingsSection
                 debugSection
                 saveActions
             }
@@ -100,6 +100,10 @@ struct SettingsView: View {
                 }
 
                 if model.deepSeekEnabled {
+                    WarningToggles(selectedModes: $model.deepSeekWarningModes)
+
+                    thresholdRow(label: "余额预警阈值", text: $model.deepSeekBalanceWarningThresholdDraft)
+
                     credentialRow(label: "Bearer Token", text: $model.platformBearerDraft, height: 88)
 
                     Text("从 platform.deepseek.com 获取，敏感信息保存到 macOS Keychain，不会上传到任何服务器。")
@@ -126,6 +130,31 @@ struct SettingsView: View {
                 }
 
                 if model.mimoEnabled {
+                    // 预警开关：仅展示当前计费模式对应的开关
+                    Toggle(isOn: Binding(
+                        get: { model.mimoWarningModes.contains(model.mimoBillingMode) },
+                        set: {
+                            if $0 {
+                                model.mimoWarningModes.insert(model.mimoBillingMode)
+                            } else {
+                                model.mimoWarningModes.remove(model.mimoBillingMode)
+                            }
+                        }
+                    )) {
+                        Text(model.mimoBillingMode.warningLabel)
+                            .foregroundStyle(.primary)
+                    }
+                    .toggleStyle(.checkbox)
+
+                    // 按量计费时显示余额阈值，Token Plan 时显示 90% 预警提示
+                    if model.mimoBillingMode == .payAsYouGo {
+                        thresholdRow(label: "余额预警阈值", text: $model.mimoBalanceWarningThresholdDraft)
+                    } else {
+                        Text("Token Plan 用量 ≥ 90% 时自动预警")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+
                     // 计费模式选择
                     VStack(alignment: .leading, spacing: 8) {
                         Text("计费模式")
@@ -166,54 +195,52 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - 预警
+    // MARK: - 通用设置
 
-    private var warningSection: some View {
+    private var generalSettingsSection: some View {
         SectionCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("菜单栏预警", systemImage: "exclamationmark.triangle.fill")
+            VStack(alignment: .leading, spacing: 10) {
+                Label("通用设置", systemImage: "gearshape.fill")
                     .font(.headline)
                     .foregroundStyle(Theme.brand)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("余额预警阈值")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            TextField("", text: $model.balanceWarningThresholdDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 72)
-                            Text("元")
-                                .foregroundStyle(.tertiary)
-                        }
+                HStack {
+                    Text("自动刷新间隔")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        TextField("", text: $model.autoRefreshMinutesDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 60)
+                        Text("分钟")
+                            .foregroundStyle(.tertiary)
                     }
-
-                    HStack {
-                        Text("自动刷新间隔")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            TextField("", text: $model.autoRefreshMinutesDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 60)
-                            Text("分钟")
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-
-                    Toggle(isOn: Binding(
-                        get: { model.launchAtLoginEnabled },
-                        set: { model.setLaunchAtLogin($0) }
-                    )) {
-                        Text("开机自动启动")
-                            .foregroundStyle(.primary)
-                    }
-                    .toggleStyle(.checkbox)
                 }
 
-                Text("余额低于阈值时，菜单栏图标和面板顶部会显示红色提醒。")
-                    .font(.caption)
+                Toggle(isOn: Binding(
+                    get: { model.launchAtLoginEnabled },
+                    set: { model.setLaunchAtLogin($0) }
+                )) {
+                    Text("开机自动启动")
+                        .foregroundStyle(.primary)
+                }
+                .toggleStyle(.checkbox)
+            }
+        }
+    }
+
+    // MARK: - 通用组件
+
+    private func thresholdRow(label: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.primary)
+            Spacer()
+            HStack(spacing: 4) {
+                TextField("", text: text)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 72)
+                Text("元")
                     .foregroundStyle(.tertiary)
             }
         }

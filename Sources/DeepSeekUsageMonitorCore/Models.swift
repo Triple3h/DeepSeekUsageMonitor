@@ -475,10 +475,33 @@ public struct MimoCookie: Equatable {
     }
 }
 
+/// 预警模式标签协议：所有支持独立预警开关的计费模式枚举需遵循
+public protocol WarningLabelProvider: CaseIterable, Hashable, RawRepresentable where RawValue == String {
+    var warningLabel: String { get }
+}
+
+/// DeepSeek 计费模式
+public enum DeepSeekBillingMode: String, Codable, Equatable, CaseIterable, Hashable, WarningLabelProvider {
+    case payAsYouGo = "按量收费"
+
+    public var warningLabel: String {
+        switch self {
+        case .payAsYouGo: return "DeepSeek 余额预警"
+        }
+    }
+}
+
 /// Mimo 计费模式
-public enum MimoBillingMode: String, Codable, Equatable {
+public enum MimoBillingMode: String, Codable, Equatable, CaseIterable, Hashable, WarningLabelProvider {
     case payAsYouGo = "按量收费"
     case tokenPlan = "Token Plan"
+
+    public var warningLabel: String {
+        switch self {
+        case .payAsYouGo: return "Mimo 按量收费预警"
+        case .tokenPlan:   return "Mimo Token Plan 预警"
+        }
+    }
 }
 
 /// Mimo 使用情况概览 (GET /api/v1/usage)

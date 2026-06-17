@@ -6,7 +6,7 @@ import Foundation
 final class AppModel: ObservableObject {
     // DeepSeek 平台
     @Published var platformBearerDraft = ""
-    @Published var balanceWarningThresholdDraft = "10"
+    @Published var deepSeekBalanceWarningThresholdDraft = "10"
     @Published var autoRefreshMinutesDraft = "5"
     @Published var launchAtLoginEnabled = false
     @Published var usageAmount: UsageAmountReport?
@@ -15,11 +15,14 @@ final class AppModel: ObservableObject {
     @Published var previousMonthUsageCost: UsageCostReport?
     @Published var userSummary: UserSummaryReport?
     @Published var deepSeekEnabled = true
+    @Published var deepSeekWarningModes: Set<DeepSeekBillingMode> = Set(DeepSeekBillingMode.allCases)
 
     // Mimo 平台
     @Published var mimoCookieDraft = ""
     @Published var mimoBillingMode: MimoBillingMode = .payAsYouGo
+    @Published var mimoBalanceWarningThresholdDraft = "10"
     @Published var mimoEnabled = false
+    @Published var mimoWarningModes: Set<MimoBillingMode> = Set(MimoBillingMode.allCases)
     @Published var mimoUsageOverview: MimoUsageOverview?
     @Published var mimoUsageDetailReport: MimoUsageDetailReport?
     @Published var mimoTokenPlanUsage: MimoTokenPlanUsage?
@@ -71,8 +74,17 @@ final class AppModel: ObservableObject {
         case mimo = "Mimo"
     }
 
-    var balanceWarningThreshold: Double {
-        Double(balanceWarningThresholdDraft) ?? 10
+    var deepSeekBalanceWarningThreshold: Double {
+        Double(deepSeekBalanceWarningThresholdDraft) ?? 10
+    }
+
+    var mimoBalanceWarningThreshold: Double {
+        Double(mimoBalanceWarningThresholdDraft) ?? 10
+    }
+
+    /// WarningBanner 展示用：取所有活跃预警平台中较小的阈值
+    var displayWarningThreshold: Double {
+        min(deepSeekBalanceWarningThreshold, mimoBalanceWarningThreshold)
     }
 
     var selectedMonthTitle: String {
@@ -91,26 +103,20 @@ final class AppModel: ObservableObject {
         userSummary?.totalBalance.doubleValue
     }
 
-    var isBalanceWarning: Bool {
-        guard let totalBalanceValue else {
-            return false
-        }
-        return totalBalanceValue < balanceWarningThreshold
-    }
-
     /// Mimo 可用余额数值（未启用或无数据时为 nil）
     var mimoBalanceValue: Double? {
         guard mimoEnabled, let balance = mimoBalance else { return nil }
         return balance.availableBalance.doubleValue
     }
 
-    /// 任意已启用平台余额低于阈值时返回 true
+    /// 任意已启用且开启预警的平台余额低于阈值时返回 true
     var isAnyBalanceWarning: Bool {
-        if deepSeekEnabled, let v = totalBalanceValue, v < balanceWarningThreshold { return true }
-        if mimoEnabled {
+        if deepSeekEnabled, deepSeekWarningModes.contains(.payAsYouGo),
+           let v = totalBalanceValue, v < deepSeekBalanceWarningThreshold { return true }
+        if mimoEnabled, mimoWarningModes.contains(mimoBillingMode) {
             if mimoBillingMode == .tokenPlan, let usage = mimoTokenPlanUsage, usage.usagePercent >= 90 {
                 return true
-            } else if let v = mimoBalanceValue, v < balanceWarningThreshold {
+            } else if let v = mimoBalanceValue, v < mimoBalanceWarningThreshold {
                 return true
             }
         }
@@ -142,8 +148,9 @@ final class AppModel: ObservableObject {
 
     func loadSavedCredentials() {
         do {
-            platformBearerDraft = try keychain.read(.platformBearerToken) ?? ""
-            mimoCookieDraft = try keychain.read(.mimoCookie) ?? ""
+            let creds = try keychain.readCredentials()
+            platformBearerDraft = creds.bearerToken
+            mimoCookieDraft = creds.mimoCookie
 
             #if DEBUG
             let env = ProcessInfo.processInfo.environment
@@ -155,7 +162,17 @@ final class AppModel: ObservableObject {
             }
             #endif
 
-            balanceWarningThresholdDraft = UserDefaults.standard.string(forKey: "balanceWarningThreshold") ?? "10"
+            // 迁移旧版单一阈值 key → 分平台
+            if let old = UserDefaults.standard.string(forKey: "balanceWarningThreshold") {
+                if !UserDefaults.standard.objectExists(forKey: "deepSeekBalanceWarningThreshold") {
+                    deepSeekBalanceWarningThresholdDraft = old
+                }
+                if !UserDefaults.standard.objectExists(forKey: "mimoBalanceWarningThreshold") {
+                    mimoBalanceWarningThresholdDraft = old
+                }
+            }
+            deepSeekBalanceWarningThresholdDraft = UserDefaults.standard.string(forKey: "deepSeekBalanceWarningThreshold") ?? deepSeekBalanceWarningThresholdDraft
+            mimoBalanceWarningThresholdDraft = UserDefaults.standard.string(forKey: "mimoBalanceWarningThreshold") ?? mimoBalanceWarningThresholdDraft
             autoRefreshMinutesDraft = UserDefaults.standard.string(forKey: "autoRefreshMinutes") ?? "5"
             launchAtLoginEnabled = LaunchAtLoginManager.isEnabled
 
@@ -165,10 +182,14 @@ final class AppModel: ObservableObject {
                 deepSeekEnabled = true // 默认启用
             }
 
+            deepSeekWarningModes = Self.loadDeepSeekWarningModes()
+
             mimoEnabled = UserDefaults.standard.bool(forKey: "mimoEnabled")
             if !UserDefaults.standard.objectExists(forKey: "mimoEnabled") {
                 mimoEnabled = false // 默认不启用
             }
+
+            mimoWarningModes = Self.loadMimoWarningModes()
 
             // 加载 Mimo 计费模式
             if let modeString = UserDefaults.standard.string(forKey: "mimoBillingMode"),
@@ -193,12 +214,17 @@ final class AppModel: ObservableObject {
     func saveSettings() {
         do {
             let previousRefreshMinutes = UserDefaults.standard.string(forKey: "autoRefreshMinutes") ?? "5"
-            try keychain.save(platformBearerDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: .platformBearerToken)
-            try keychain.save(mimoCookieDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: .mimoCookie)
-            UserDefaults.standard.set(balanceWarningThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "balanceWarningThreshold")
+            try keychain.saveCredentials(StoredCredentials(
+                bearerToken: platformBearerDraft.trimmingCharacters(in: .whitespacesAndNewlines),
+                mimoCookie: mimoCookieDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            ))
+            UserDefaults.standard.set(deepSeekBalanceWarningThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "deepSeekBalanceWarningThreshold")
+            UserDefaults.standard.set(mimoBalanceWarningThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "mimoBalanceWarningThreshold")
             UserDefaults.standard.set(autoRefreshMinutesDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "autoRefreshMinutes")
             UserDefaults.standard.set(deepSeekEnabled, forKey: "deepSeekEnabled")
+            Self.saveDeepSeekWarningModes(deepSeekWarningModes)
             UserDefaults.standard.set(mimoEnabled, forKey: "mimoEnabled")
+            Self.saveMimoWarningModes(mimoWarningModes)
             UserDefaults.standard.set(mimoBillingMode.rawValue, forKey: "mimoBillingMode")
             UserDefaults.standard.set(selectedTheme.rawValue, forKey: "selectedTheme")
 
@@ -514,6 +540,39 @@ final class AppModel: ObservableObject {
         if selectedPeriod == .today {
             selectedPeriod = .month
         }
+    }
+
+    // MARK: - 预警模式持久化（通用）
+
+    private static func loadWarningModes<T: WarningLabelProvider>(_ type: T.Type, key: String) -> Set<T> {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: key) != nil else {
+            return Set(T.allCases)
+        }
+        let rawValues = defaults.stringArray(forKey: key) ?? []
+        return Set(rawValues.compactMap(T.init))
+    }
+
+    private static func saveWarningModes<T: WarningLabelProvider>(_ modes: Set<T>, key: String) {
+        UserDefaults.standard.set(modes.map(\.rawValue), forKey: key)
+    }
+
+    // DeepSeek
+    static func loadDeepSeekWarningModes() -> Set<DeepSeekBillingMode> {
+        loadWarningModes(DeepSeekBillingMode.self, key: "deepSeekWarningModes")
+    }
+
+    static func saveDeepSeekWarningModes(_ modes: Set<DeepSeekBillingMode>) {
+        saveWarningModes(modes, key: "deepSeekWarningModes")
+    }
+
+    // Mimo
+    static func loadMimoWarningModes() -> Set<MimoBillingMode> {
+        loadWarningModes(MimoBillingMode.self, key: "mimoWarningModes")
+    }
+
+    static func saveMimoWarningModes(_ modes: Set<MimoBillingMode>) {
+        saveWarningModes(modes, key: "mimoWarningModes")
     }
 }
 
