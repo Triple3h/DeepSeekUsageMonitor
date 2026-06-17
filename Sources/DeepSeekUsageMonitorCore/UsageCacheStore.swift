@@ -66,6 +66,17 @@ public final class UsageCacheStore {
         return Date().timeIntervalSince(modificationDate) < maxAge
     }
 
+    /// 加载缓存（仅在有效时返回）
+    public func loadIfValid<T: CacheableReport>(
+        _ type: T.Type,
+        year: Int,
+        month: Int,
+        maxAge: TimeInterval = 3600
+    ) -> T? {
+        guard isValid(type, year: year, month: month, maxAge: maxAge) else { return nil }
+        return load(type, year: year, month: month)
+    }
+
     /// 清除指定平台的所有缓存
     public func clearPlatform(_ platform: String) {
         let platformDir = cacheDirectory.appendingPathComponent(platform, isDirectory: true)

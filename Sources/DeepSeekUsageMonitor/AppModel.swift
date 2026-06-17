@@ -266,9 +266,11 @@ final class AppModel: ObservableObject {
         // DeepSeek 平台
         if deepSeekEnabled {
             // Show cached data immediately if available and not stale
-            if cacheStore.isValid(UsageAmountReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge) {
-                if usageAmount == nil { usageAmount = cacheStore.load(UsageAmountReport.self, year: selectedYear, month: selectedMonth) }
-                if usageCost == nil { usageCost = cacheStore.load(UsageCostReport.self, year: selectedYear, month: selectedMonth) }
+            if usageAmount == nil {
+                usageAmount = cacheStore.loadIfValid(UsageAmountReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge)
+            }
+            if usageCost == nil {
+                usageCost = cacheStore.loadIfValid(UsageCostReport.self, year: selectedYear, month: selectedMonth, maxAge: cacheMaxAge)
             }
 
             do {
@@ -353,10 +355,8 @@ final class AppModel: ObservableObject {
         let (month, year) = previousMonthForLast7Days
 
         // Try cache first
-        if cacheStore.isValid(UsageAmountReport.self, year: year, month: month, maxAge: 604800) {
-            previousMonthUsageAmount = cacheStore.load(UsageAmountReport.self, year: year, month: month)
-            previousMonthUsageCost = cacheStore.load(UsageCostReport.self, year: year, month: month)
-        }
+        previousMonthUsageAmount = cacheStore.loadIfValid(UsageAmountReport.self, year: year, month: month, maxAge: 604800)
+        previousMonthUsageCost = cacheStore.loadIfValid(UsageCostReport.self, year: year, month: month, maxAge: 604800)
 
         // Skip network if cache is fresh
         if previousMonthUsageAmount != nil && previousMonthUsageCost != nil {
