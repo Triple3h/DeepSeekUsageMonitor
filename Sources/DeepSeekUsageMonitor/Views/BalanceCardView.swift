@@ -153,11 +153,11 @@ struct BalanceCardView: View {
             billingType: .quotaBased,
             primaryValue: model.mimoTokenPlanUsage.map { compactNumber($0.usedTokens) },
             secondaryValue: model.mimoTokenPlanUsage.map { "已用 \(String(format: "%.0f%%", $0.usagePercent * 100))" },
-            progress: model.mimoTokenPlanUsage.map { 1.0 - $0.usagePercent },
+            progress: model.mimoTokenPlanUsage.map { $0.usagePercent },
             details: [
-                .init(title: "已用", value: model.mimoTokenPlanUsage.map { compactNumber($0.usedTokens) } ?? "--"),
-                .init(title: "剩余", value: model.mimoTokenPlanUsage.map { compactNumber($0.remainingTokens) } ?? "--"),
-                .init(title: "使用率", value: model.mimoTokenPlanUsage.map { String(format: "%.1f%%", $0.usagePercent * 100) } ?? "--")
+                .init(title: "", value: "0%"),
+                .init(title: "", value: "50%"),
+                .init(title: "", value: "100%")
             ],
             platformURL: URL(string: "https://platform.xiaomimimo.com/console/plan-manage")
         )
@@ -178,6 +178,9 @@ struct BalanceCardView: View {
 
     private func compactNumber(_ value: Int?) -> String {
         guard let value else { return "--" }
+        if value >= 1_000_000_000 {
+            return String(format: "%.1fB", Double(value) / 1_000_000_000)
+        }
         if value >= 1_000_000 {
             return String(format: "%.1fM", Double(value) / 1_000_000)
         }
@@ -225,9 +228,10 @@ struct PlatformRowView: View {
 
                 // 明细标签
                 if !row.details.isEmpty {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 0) {
                         ForEach(row.details) { detail in
                             DetailLabel(title: detail.title, value: detail.value)
+                                .frame(maxWidth: .infinity, alignment: detail.title.isEmpty ? .center : .leading)
                         }
                     }
                 }

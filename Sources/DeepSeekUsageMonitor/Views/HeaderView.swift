@@ -53,8 +53,8 @@ struct HeaderView: View {
             .help("退出应用")
         }
         .padding(.horizontal, 20)
-        .padding(.top, 14)
-        .padding(.bottom, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
         .overlay(alignment: .bottom) {
             Divider()
                 .opacity(0.35)

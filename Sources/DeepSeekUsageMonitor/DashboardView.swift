@@ -37,8 +37,8 @@ struct DashboardView: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .padding(.bottom, 0)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
         .background {
             Theme.panelBackground(for: colorScheme)
         }
@@ -457,6 +457,9 @@ struct DashboardView: View {
     }
 
     private func compactNumber(_ value: Int) -> String {
+        if value >= 1_000_000_000 {
+            return String(format: "%.1fB", Double(value) / 1_000_000_000)
+        }
         if value >= 1_000_000 {
             return String(format: "%.1fM", Double(value) / 1_000_000)
         }
