@@ -11,3 +11,4 @@ DerivedData/
 .reasonix/
 reasonix.toml
 docs/
+.codebuddy/

@@ -14,9 +14,9 @@ struct SectionCard<Content: View>: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(Theme.cardBackground(for: colorScheme))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(Theme.panelBorder(for: colorScheme), lineWidth: 0.5)
             )
     }

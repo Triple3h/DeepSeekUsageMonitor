@@ -4,6 +4,7 @@ import Foundation
 
 @MainActor
 final class AppModel: ObservableObject {
+    // DeepSeek 平台
     @Published var platformBearerDraft = ""
     @Published var balanceWarningThresholdDraft = "10"
     @Published var autoRefreshMinutesDraft = "5"
@@ -13,11 +14,27 @@ final class AppModel: ObservableObject {
     @Published var previousMonthUsageAmount: UsageAmountReport?
     @Published var previousMonthUsageCost: UsageCostReport?
     @Published var userSummary: UserSummaryReport?
+    @Published var deepSeekEnabled = true
+
+    // Mimo 平台
+    @Published var mimoCookieDraft = ""
+    @Published var mimoBillingMode: MimoBillingMode = .payAsYouGo
+    @Published var mimoEnabled = false
+    @Published var mimoUsageOverview: MimoUsageOverview?
+    @Published var mimoUsageDetailReport: MimoUsageDetailReport?
+    @Published var mimoTokenPlanUsage: MimoTokenPlanUsage?
+    @Published var mimoTokenPlanDetailReport: MimoTokenPlanDetailReport?
+    @Published var mimoBalance: MimoBalanceReport?
+
+    // 通用状态
     @Published var selectedPeriod: UsagePeriod = .today
     @Published var selectedMonth: Int
     @Published var selectedYear: Int
+    @Published var selectedPlatform: Platform = .all
     /// 面板是否显示设置页面
     @Published var isSettingsShown = false
+    /// 主题模式
+    @Published var selectedTheme: AppThemeMode = .system
 
     @Published var isRefreshingBalance = false
     @Published var isRefreshingUsage = false
@@ -26,6 +43,7 @@ final class AppModel: ObservableObject {
 
     private let keychain = KeychainStore()
     private let platformClient = PlatformSummaryClient()
+    private let mimoClient = MimoClient()
     private let cacheStore = UsageCacheStore()
     private var backgroundRefreshTask: Task<Void, Never>?
 
@@ -35,6 +53,13 @@ final class AppModel: ObservableObject {
         selectedYear = components.year ?? 2026
         loadSavedCredentials()
         startBackgroundRefresh()
+    }
+
+    // 平台枚举
+    enum Platform: String, CaseIterable {
+        case all = "全部"
+        case deepSeek = "DeepSeek"
+        case mimo = "Mimo"
     }
 
     var balanceWarningThreshold: Double {
@@ -71,20 +96,65 @@ final class AppModel: ObservableObject {
         )
     }
 
+    var mimoCredentialStatus: Bool {
+        let cookie = (try? keychain.read(.mimoCookie)) ?? nil
+        return cookie?.isEmpty == false
+    }
+
+    /// 各启用平台本月花费之和（只加花费，不混入余额）
+    var combinedMonthCost: Double? {
+        var cost: Double = 0
+        var hasAny = false
+        if deepSeekEnabled, let ds = userSummary?.monthlyCost.doubleValue {
+            cost += ds; hasAny = true
+        }
+        if mimoEnabled, let mimo = mimoUsageOverview?.currentMonthCost.doubleValue {
+            cost += mimo; hasAny = true
+        }
+        return hasAny ? cost : nil
+    }
+
     func loadSavedCredentials() {
         do {
             platformBearerDraft = try keychain.read(.platformBearerToken) ?? ""
+            mimoCookieDraft = try keychain.read(.mimoCookie) ?? ""
 
             #if DEBUG
             let env = ProcessInfo.processInfo.environment
             if platformBearerDraft.isEmpty {
                 platformBearerDraft = env["DEEPSEEK_BEARER"] ?? ""
             }
+            if mimoCookieDraft.isEmpty {
+                mimoCookieDraft = env["MIMO_COOKIE"] ?? ""
+            }
             #endif
 
             balanceWarningThresholdDraft = UserDefaults.standard.string(forKey: "balanceWarningThreshold") ?? "10"
             autoRefreshMinutesDraft = UserDefaults.standard.string(forKey: "autoRefreshMinutes") ?? "5"
             launchAtLoginEnabled = LaunchAtLoginManager.isEnabled
+
+            // 加载平台启用状态
+            deepSeekEnabled = UserDefaults.standard.bool(forKey: "deepSeekEnabled")
+            if !UserDefaults.standard.objectExists(forKey: "deepSeekEnabled") {
+                deepSeekEnabled = true // 默认启用
+            }
+
+            mimoEnabled = UserDefaults.standard.bool(forKey: "mimoEnabled")
+            if !UserDefaults.standard.objectExists(forKey: "mimoEnabled") {
+                mimoEnabled = false // 默认不启用
+            }
+
+            // 加载 Mimo 计费模式
+            if let modeString = UserDefaults.standard.string(forKey: "mimoBillingMode"),
+               let mode = MimoBillingMode(rawValue: modeString) {
+                mimoBillingMode = mode
+            }
+
+            // 加载主题模式
+            if let themeString = UserDefaults.standard.string(forKey: "selectedTheme"),
+               let theme = AppThemeMode(rawValue: themeString) {
+                selectedTheme = theme
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -94,8 +164,14 @@ final class AppModel: ObservableObject {
         do {
             let previousRefreshMinutes = UserDefaults.standard.string(forKey: "autoRefreshMinutes") ?? "5"
             try keychain.save(platformBearerDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: .platformBearerToken)
+            try keychain.save(mimoCookieDraft.trimmingCharacters(in: .whitespacesAndNewlines), account: .mimoCookie)
             UserDefaults.standard.set(balanceWarningThresholdDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "balanceWarningThreshold")
             UserDefaults.standard.set(autoRefreshMinutesDraft.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "autoRefreshMinutes")
+            UserDefaults.standard.set(deepSeekEnabled, forKey: "deepSeekEnabled")
+            UserDefaults.standard.set(mimoEnabled, forKey: "mimoEnabled")
+            UserDefaults.standard.set(mimoBillingMode.rawValue, forKey: "mimoBillingMode")
+            UserDefaults.standard.set(selectedTheme.rawValue, forKey: "selectedTheme")
+
             if previousRefreshMinutes != autoRefreshMinutesDraft {
                 startBackgroundRefresh()
             }
@@ -137,13 +213,44 @@ final class AppModel: ObservableObject {
         isRefreshingBalance = true
         defer { isRefreshingBalance = false }
 
-        do {
-            let bearer = try keychain.read(.platformBearerToken) ?? ""
-            userSummary = try await platformClient.fetchUserSummary(bearerToken: bearer)
+        var errors: [String] = []
+
+        // DeepSeek 平台
+        if deepSeekEnabled {
+            do {
+                let bearer = try keychain.read(.platformBearerToken) ?? ""
+                userSummary = try await platformClient.fetchUserSummary(bearerToken: bearer)
+            } catch {
+                errors.append("DeepSeek: \(error.localizedDescription)")
+            }
+        }
+
+        // Mimo 平台（余额两个模式都需要，按模式决定 fetch 用量/套餐）
+        if mimoEnabled {
+            let cookieString = (try? keychain.read(.mimoCookie)) ?? ""
+            // 并行 fetch，各接口独立处理错误
+            async let balanceResult = mimoClient.fetchBalance(cookieString: cookieString)
+            if mimoBillingMode == .payAsYouGo {
+                async let overviewResult = mimoClient.fetchUsageOverview(cookieString: cookieString)
+                do { mimoUsageOverview = try await overviewResult } catch {
+                    errors.append("Mimo 用量: \(error.localizedDescription)")
+                }
+            } else {
+                async let tokenPlanResult = mimoClient.fetchTokenPlanUsage(cookieString: cookieString)
+                do { mimoTokenPlanUsage = try await tokenPlanResult } catch {
+                    errors.append("Mimo 套餐: \(error.localizedDescription)")
+                }
+            }
+            do { mimoBalance = try await balanceResult } catch {
+                errors.append("Mimo 余额: \(error.localizedDescription)")
+            }
+        }
+
+        if errors.isEmpty {
             statusMessage = "余额已刷新"
             errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            errorMessage = errors.joined(separator: "\n")
         }
     }
 
@@ -154,41 +261,83 @@ final class AppModel: ObservableObject {
         let isCurrent = isCurrentMonth(year: selectedYear, month: selectedMonth)
         let cacheMaxAge: TimeInterval = isCurrent ? 3600 : 604800 // 1 hour for current month, 7 days for history
 
-        // Show cached data immediately if available and not stale
-        if cacheStore.isCacheValid(month: selectedMonth, year: selectedYear, maxAge: cacheMaxAge) {
-            if usageAmount == nil { usageAmount = cacheStore.loadUsage(month: selectedMonth, year: selectedYear) }
-            if usageCost == nil { usageCost = cacheStore.loadCost(month: selectedMonth, year: selectedYear) }
+        var errors: [String] = []
+
+        // DeepSeek 平台
+        if deepSeekEnabled {
+            // Show cached data immediately if available and not stale
+            if cacheStore.isCacheValid(month: selectedMonth, year: selectedYear, maxAge: cacheMaxAge) {
+                if usageAmount == nil { usageAmount = cacheStore.loadUsage(month: selectedMonth, year: selectedYear) }
+                if usageCost == nil { usageCost = cacheStore.loadCost(month: selectedMonth, year: selectedYear) }
+            }
+
+            do {
+                let bearer = try keychain.read(.platformBearerToken) ?? ""
+                async let usage = platformClient.fetchUsageAmount(
+                    month: selectedMonth,
+                    year: selectedYear,
+                    bearerToken: bearer
+                )
+                async let cost = platformClient.fetchUsageCost(
+                    month: selectedMonth,
+                    year: selectedYear,
+                    bearerToken: bearer
+                )
+                async let summary = platformClient.fetchUserSummary(bearerToken: bearer)
+                let newUsage = try await usage
+                let newCost = try await cost
+                usageAmount = newUsage
+                usageCost = newCost
+                userSummary = try await summary
+                cacheStore.save(usage: newUsage, month: selectedMonth, year: selectedYear)
+                cacheStore.save(cost: newCost, month: selectedMonth, year: selectedYear)
+            } catch {
+                // If network fails but we have cached data, keep it and show a subtle message
+                if usageAmount != nil || usageCost != nil {
+                    statusMessage = "已显示缓存数据"
+                } else {
+                    errors.append("DeepSeek: \(error.localizedDescription)")
+                }
+            }
         }
 
-        do {
-            let bearer = try keychain.read(.platformBearerToken) ?? ""
-            async let usage = platformClient.fetchUsageAmount(
-                month: selectedMonth,
-                year: selectedYear,
-                bearerToken: bearer
-            )
-            async let cost = platformClient.fetchUsageCost(
-                month: selectedMonth,
-                year: selectedYear,
-                bearerToken: bearer
-            )
-            async let summary = platformClient.fetchUserSummary(bearerToken: bearer)
-            let newUsage = try await usage
-            let newCost = try await cost
-            usageAmount = newUsage
-            usageCost = newCost
-            userSummary = try await summary
-            cacheStore.save(usage: newUsage, month: selectedMonth, year: selectedYear)
-            cacheStore.save(cost: newCost, month: selectedMonth, year: selectedYear)
+        // Mimo 平台（余额两个模式都要，详情按模式决定）
+        if mimoEnabled {
+            let cookieString = (try? keychain.read(.mimoCookie)) ?? ""
+            async let balanceResult = mimoClient.fetchBalance(cookieString: cookieString)
+            async let overviewResult = mimoClient.fetchUsageOverview(cookieString: cookieString)
+
+            do { mimoBalance = try await balanceResult } catch {
+                errors.append("Mimo 余额: \(error.localizedDescription)")
+            }
+            do { mimoUsageOverview = try await overviewResult } catch {
+                errors.append("Mimo 概览: \(error.localizedDescription)")
+            }
+
+            if mimoBillingMode == .payAsYouGo {
+                async let detailResult = mimoClient.fetchUsageDetailList(
+                    month: selectedMonth, year: selectedYear, cookieString: cookieString)
+                do { mimoUsageDetailReport = try await detailResult } catch {
+                    errors.append("Mimo 按量详情: \(error.localizedDescription)")
+                }
+            } else {
+                async let tpResult = mimoClient.fetchTokenPlanUsage(cookieString: cookieString)
+                async let tpDetailResult = mimoClient.fetchTokenPlanDetailList(
+                    month: selectedMonth, year: selectedYear, cookieString: cookieString)
+                do { mimoTokenPlanUsage = try await tpResult } catch {
+                    errors.append("Mimo 套餐概览: \(error.localizedDescription)")
+                }
+                do { mimoTokenPlanDetailReport = try await tpDetailResult } catch {
+                    errors.append("Mimo 套餐详情: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        if errors.isEmpty {
             statusMessage = "用量已刷新"
             errorMessage = nil
-        } catch {
-            // If network fails but we have cached data, keep it and show a subtle message
-            if usageAmount != nil || usageCost != nil {
-                statusMessage = "已显示缓存数据"
-            } else {
-                errorMessage = error.localizedDescription
-            }
+        } else {
+            errorMessage = errors.joined(separator: "\n")
         }
     }
 
@@ -310,8 +459,14 @@ enum UsagePeriod: Hashable {
     case month
 }
 
-private extension Decimal {
+extension Decimal {
     var doubleValue: Double {
         NSDecimalNumber(decimal: self).doubleValue
+    }
+}
+
+extension UserDefaults {
+    func objectExists(forKey: String) -> Bool {
+        return object(forKey: forKey) != nil
     }
 }

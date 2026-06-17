@@ -1,5 +1,50 @@
 import SwiftUI
 
+// MARK: - App Theme Mode
+
+/// 用户可选的主题模式
+enum AppThemeMode: String, CaseIterable, Identifiable {
+    case system  = "system"
+    case dark    = "dark"
+    case light   = "light"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .dark:   return "深色"
+        case .light:  return "浅色"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .dark:   return "moon.fill"
+        case .light:  return "sun.max.fill"
+        }
+    }
+
+    /// 转换为 SwiftUI ColorScheme，system 返回 nil
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .dark:   return .dark
+        case .light:  return .light
+        }
+    }
+
+    /// 转换为 NSAppearance
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .dark:   return NSAppearance(named: .darkAqua)
+        case .light:  return NSAppearance(named: .aqua)
+        }
+    }
+}
+
 // MARK: - DeepSeek Theme
 //
 // 品牌色: #4D6BFE (DeepSeek Blue)
@@ -7,9 +52,9 @@ import SwiftUI
 
 enum Theme {
     static let panelWidth: CGFloat = 380
-    static let panelDashboardHeight: CGFloat = 520
+    static let panelDashboardHeight: CGFloat = 640
     static let panelEmptyHeight: CGFloat = 300
-    static let panelSettingsHeight: CGFloat = 640
+    static let panelSettingsHeight: CGFloat = 590
     static let panelCornerRadius: CGFloat = 16
     static let panelTopGap: CGFloat = 12
 
@@ -52,21 +97,21 @@ enum Theme {
     /// 卡片背景（适配深色/浅色模式）
     static func cardBackground(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color(white: 0.14).opacity(0.92)
-            : Color(white: 0.97).opacity(0.92)
+            ? Color(red: 0.20, green: 0.22, blue: 0.27)
+            : Color.white
     }
 
     /// 面板背景（适配深色/浅色模式）
     static func panelBackground(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color(red: 0.13, green: 0.15, blue: 0.18).opacity(0.88)
-            : Color(red: 0.96, green: 0.98, blue: 1.0).opacity(0.90)
+            ? Color(red: 0.14, green: 0.16, blue: 0.20)
+            : Color(red: 0.96, green: 0.96, blue: 0.97)
     }
 
     /// 面板边框
     static func panelBorder(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
-            ? Color.white.opacity(0.14)
+            ? Color.white.opacity(0.10)
             : Color.black.opacity(0.08)
     }
 

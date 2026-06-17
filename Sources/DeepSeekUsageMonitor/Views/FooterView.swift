@@ -37,7 +37,11 @@ struct FooterView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.06))
+        .background(Color.white.opacity(0.03))
+        .overlay(alignment: .top) {
+            Divider()
+                .opacity(0.35)
+        }
     }
 }
 

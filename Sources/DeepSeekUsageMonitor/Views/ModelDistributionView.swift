@@ -13,12 +13,16 @@ struct ModelDistributionView: View {
 
     private let muted = Color.secondary
 
+    private var sortedModels: [UsageModelAmount] {
+        models.sorted { $0.totalTokens > $1.totalTokens }
+    }
+
     var body: some View {
         VStack(spacing: 8) {
-            ForEach(Array(models.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(sortedModels.enumerated()), id: \.element.id) { index, item in
                 modelRow(item, index: index)
                 modelUsageBar(item, index: index)
-                    .padding(.bottom, index == models.count - 1 ? 0 : 4)
+                    .padding(.bottom, index == sortedModels.count - 1 ? 0 : 4)
             }
         }
     }

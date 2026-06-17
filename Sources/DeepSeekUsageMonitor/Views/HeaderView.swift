@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct HeaderView: View {
@@ -6,14 +7,8 @@ struct HeaderView: View {
     var body: some View {
         HStack {
             HStack(spacing: 8) {
-                Text("DS")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(Theme.brandGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                Text("DeepSeek 开放平台")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("API 费用监控")
+                    .font(.system(size: 15, weight: .bold))
                 #if DEBUG
                 Text("(Dev)")
                     .font(.system(size: 10, weight: .medium))
@@ -36,11 +31,33 @@ struct HeaderView: View {
             .buttonStyle(IconButtonStyle())
             .disabled(model.isRefreshingBalance || model.isRefreshingUsage)
             .help("刷新数据")
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    model.isSettingsShown.toggle()
+                }
+            } label: {
+                Image(systemName: model.isSettingsShown ? "chevron.left" : "gearshape")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(IconButtonStyle())
+            .help(model.isSettingsShown ? "返回" : "设置")
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("退出应用")
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
         .overlay(alignment: .bottom) {
             Divider()
+                .opacity(0.35)
         }
     }
 }

@@ -17,6 +17,7 @@ public final class KeychainStore {
 
     public enum Account: String {
         case platformBearerToken = "DeepSeekPlatformBearerToken"
+        case mimoCookie = "MimoPlatformCookie"
     }
 
     public init() {}

@@ -63,6 +63,7 @@ final class MenuBarManager: NSObject {
             rootView: AnyView(
                 DashboardView(onClose: { [weak self] in self?.closePanel() })
                     .environmentObject(model)
+                    .preferredColorScheme(model.selectedTheme.colorScheme)
                     .frame(width: Theme.panelWidth)
             )
         )
@@ -71,6 +72,7 @@ final class MenuBarManager: NSObject {
             contentViewController: hostingController,
             contentSize: NSSize(width: Theme.panelWidth, height: Theme.panelDashboardHeight)
         )
+        panel.appearance = model.selectedTheme.nsAppearance
     }
 
     func showPanel(button: NSStatusBarButton) {
@@ -185,12 +187,21 @@ final class MenuBarManager: NSObject {
                 self?.switchPanelContent(toSettings: isSettings)
             }
             .store(in: &cancellables)
+
+        // 主题切换
+        model.$selectedTheme
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] theme in
+                self?.applyTheme(theme)
+            }
+            .store(in: &cancellables)
     }
 
     private func switchPanelContent(toSettings: Bool) {
         let newRoot: AnyView = toSettings
-            ? AnyView(SettingsView().environmentObject(model).frame(width: Theme.panelWidth))
-            : AnyView(DashboardView(onClose: { [weak self] in self?.closePanel() }).environmentObject(model).frame(width: Theme.panelWidth))
+            ? AnyView(SettingsView().environmentObject(model).frame(width: Theme.panelWidth).preferredColorScheme(model.selectedTheme.colorScheme))
+            : AnyView(DashboardView(onClose: { [weak self] in self?.closePanel() }).environmentObject(model).frame(width: Theme.panelWidth).preferredColorScheme(model.selectedTheme.colorScheme))
 
         hostingController.rootView = newRoot
 
@@ -318,5 +329,13 @@ final class MenuBarManager: NSObject {
             button.target = nil
         }
         NSStatusBar.system.removeStatusItem(statusItem)
+    }
+
+    // MARK: - Theme
+
+    private func applyTheme(_ theme: AppThemeMode) {
+        panel.appearance = theme.nsAppearance
+        // 重新应用 SwiftUI 视图以更新 preferredColorScheme
+        switchPanelContent(toSettings: model.isSettingsShown)
     }
 }

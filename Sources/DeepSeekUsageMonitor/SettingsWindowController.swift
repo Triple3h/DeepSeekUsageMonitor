@@ -1,9 +1,11 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
 final class SettingsWindowController: ObservableObject {
     private var window: NSWindow?
+    private var cancellable: AnyCancellable?
 
     func show(model: AppModel) {
         NSApp.setActivationPolicy(.accessory)
@@ -15,6 +17,7 @@ final class SettingsWindowController: ObservableObject {
         let hostingController = NSHostingController(
             rootView: SettingsView()
                 .environmentObject(model)
+                .preferredColorScheme(model.selectedTheme.colorScheme)
                 .frame(width: 560, height: 520)
         )
         let window = NSWindow(contentViewController: hostingController)
@@ -24,8 +27,17 @@ final class SettingsWindowController: ObservableObject {
         window.isReleasedWhenClosed = false
         window.level = .floating
         window.center()
+        window.appearance = model.selectedTheme.nsAppearance
         self.window = window
         activate(window)
+
+        // 监听主题变化
+        cancellable = model.$selectedTheme
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak window] theme in
+                window?.appearance = theme.nsAppearance
+            }
     }
 
     private func activate(_ window: NSWindow) {

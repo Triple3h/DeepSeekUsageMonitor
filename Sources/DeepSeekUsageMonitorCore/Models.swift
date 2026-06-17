@@ -341,3 +341,588 @@ public struct PlatformCost: Equatable, Identifiable {
         Decimal(string: amount) ?? 0
     }
 }
+
+// MARK: - Mimo Platform Models
+
+/// Mimo Cookie 解析结果
+public struct MimoCookie: Equatable {
+    public let serviceToken: String
+    public let apiPlatformServiceToken: String?
+    public let userId: String?
+    public let apiPlatformPh: String?
+    public let apiPlatformSlh: String?
+    public let xiaomichatbotPh: String?
+    public let rawCookie: String
+
+    public init(
+        serviceToken: String,
+        apiPlatformServiceToken: String? = nil,
+        userId: String? = nil,
+        apiPlatformPh: String? = nil,
+        apiPlatformSlh: String? = nil,
+        xiaomichatbotPh: String? = nil,
+        rawCookie: String
+    ) {
+        self.serviceToken = serviceToken
+        self.apiPlatformServiceToken = apiPlatformServiceToken
+        self.userId = userId
+        self.apiPlatformPh = apiPlatformPh
+        self.apiPlatformSlh = apiPlatformSlh
+        self.xiaomichatbotPh = xiaomichatbotPh
+        self.rawCookie = rawCookie
+    }
+
+    /// 生成完整的 Cookie Header
+    public var cookieHeader: String {
+        var parts: [String] = []
+
+        if !serviceToken.isEmpty {
+            parts.append("serviceToken=\(serviceToken)")
+        }
+
+        if let apiPlatformServiceToken, !apiPlatformServiceToken.isEmpty {
+            parts.append("api-platform_serviceToken=\(apiPlatformServiceToken)")
+        }
+
+        if let userId, !userId.isEmpty {
+            parts.append("userId=\(userId)")
+        }
+
+        if let apiPlatformPh, !apiPlatformPh.isEmpty {
+            parts.append("api-platform_ph=\(apiPlatformPh)")
+        }
+
+        if let apiPlatformSlh, !apiPlatformSlh.isEmpty {
+            parts.append("api-platform_slh=\(apiPlatformSlh)")
+        }
+
+        if let xiaomichatbotPh, !xiaomichatbotPh.isEmpty {
+            parts.append("xiaomichatbot_ph=\(xiaomichatbotPh)")
+        }
+
+        return parts.joined(separator: "; ")
+    }
+
+    /// 解析 cookie 字符串
+    public static func parse(_ cookieString: String) -> MimoCookie? {
+        let trimmed = cookieString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var serviceToken = ""
+        var apiPlatformServiceToken: String? = nil
+        var userId: String? = nil
+        var apiPlatformPh: String? = nil
+        var apiPlatformSlh: String? = nil
+        var xiaomichatbotPh: String? = nil
+
+        // 解析 cookie 字段
+        let pairs = trimmed.split(separator: ";")
+        for pair in pairs {
+            let keyValue = pair.split(separator: "=", maxSplits: 1)
+            guard keyValue.count == 2 else { continue }
+
+            let key = keyValue[0].trimmingCharacters(in: .whitespaces)
+            let rawValue = keyValue[1].trimmingCharacters(in: .whitespaces)
+            // 去掉 cookie 值两端的引号（浏览器 cookie 常见格式）
+            let value: String
+            if rawValue.count >= 2, rawValue.first == "\"", rawValue.last == "\"" {
+                value = String(rawValue.dropFirst().dropLast())
+            } else {
+                value = rawValue
+            }
+
+            switch key {
+            case "serviceToken":
+                serviceToken = value
+            case "api-platform_serviceToken":
+                apiPlatformServiceToken = value
+            case "userId":
+                userId = value
+            case "api-platform_ph":
+                apiPlatformPh = value
+            case "api-platform_slh":
+                apiPlatformSlh = value
+            case "xiaomichatbot_ph":
+                xiaomichatbotPh = value
+            default:
+                break
+            }
+        }
+
+        #if DEBUG
+        print("\n========== Mimo Cookie Parse ==========")
+        print("📝 Input length: \(trimmed.count) chars")
+        print("✅ serviceToken: \(serviceToken.isEmpty ? "❌ MISSING" : "✓ (\(serviceToken.count) chars)")")
+        print("  - api-platform_serviceToken: \(apiPlatformServiceToken != nil ? "✓" : "❌")")
+        print("  - userId: \(userId ?? "❌")")
+        print("  - api-platform_ph: \(apiPlatformPh != nil ? "✓" : "❌")")
+        print("  - api-platform_slh: \(apiPlatformSlh != nil ? "✓" : "❌")")
+        print("  - xiaomichatbot_ph: \(xiaomichatbotPh != nil ? "✓" : "❌")")
+        print("=========================================\n")
+        #endif
+
+        guard !serviceToken.isEmpty else { return nil }
+
+        return MimoCookie(
+            serviceToken: serviceToken,
+            apiPlatformServiceToken: apiPlatformServiceToken,
+            userId: userId,
+            apiPlatformPh: apiPlatformPh,
+            apiPlatformSlh: apiPlatformSlh,
+            xiaomichatbotPh: xiaomichatbotPh,
+            rawCookie: trimmed
+        )
+    }
+}
+
+/// Mimo 计费模式
+public enum MimoBillingMode: String, Codable, Equatable {
+    case payAsYouGo = "按量收费"
+    case tokenPlan = "Token Plan"
+}
+
+/// Mimo 使用情况概览 (GET /api/v1/usage)
+public struct MimoUsageOverview: Equatable, Codable {
+    public let endpoint: URL
+    public let capturedAt: Date
+    public let rawJSON: String
+    public let tokenUsage: MimoTokenUsage
+    public let accountRateLimit: MimoAccountRateLimit
+    public let costUsage: MimoCostUsage
+    public let pluginUsage: MimoPluginUsage
+
+    public init(
+        endpoint: URL,
+        capturedAt: Date,
+        rawJSON: String,
+        tokenUsage: MimoTokenUsage,
+        accountRateLimit: MimoAccountRateLimit,
+        costUsage: MimoCostUsage,
+        pluginUsage: MimoPluginUsage
+    ) {
+        self.endpoint = endpoint
+        self.capturedAt = capturedAt
+        self.rawJSON = rawJSON
+        self.tokenUsage = tokenUsage
+        self.accountRateLimit = accountRateLimit
+        self.costUsage = costUsage
+        self.pluginUsage = pluginUsage
+    }
+
+    public var totalTokens: Int {
+        tokenUsage.totalToken
+    }
+
+    public var totalCost: Decimal {
+        Decimal(string: costUsage.totalCost) ?? 0
+    }
+
+    public var currentMonthCost: Decimal {
+        Decimal(string: costUsage.currentMonthCost) ?? 0
+    }
+}
+
+public struct MimoTokenUsage: Equatable, Codable {
+    public let inputToken: Int
+    public let outputToken: Int
+    public let cacheToken: Int
+    public let totalToken: Int
+    public let inputAudioDuration: Int
+
+    public init(inputToken: Int, outputToken: Int, cacheToken: Int, totalToken: Int, inputAudioDuration: Int) {
+        self.inputToken = inputToken
+        self.outputToken = outputToken
+        self.cacheToken = cacheToken
+        self.totalToken = totalToken
+        self.inputAudioDuration = inputAudioDuration
+    }
+}
+
+public struct MimoAccountRateLimit: Equatable, Codable {
+    public let tpm: Int
+    public let rpm: Int
+    public let queryTpm: Int
+    public let concurrency: Int
+
+    public init(tpm: Int, rpm: Int, queryTpm: Int, concurrency: Int) {
+        self.tpm = tpm
+        self.rpm = rpm
+        self.queryTpm = queryTpm
+        self.concurrency = concurrency
+    }
+}
+
+public struct MimoCostUsage: Equatable, Codable {
+    public let totalCost: String
+    public let currentMonthCost: String
+
+    public init(totalCost: String, currentMonthCost: String) {
+        self.totalCost = totalCost
+        self.currentMonthCost = currentMonthCost
+    }
+}
+
+public struct MimoPluginUsage: Equatable, Codable {
+    public let totalRequestCount: String
+    public let webSearchRequestCount: String
+
+    public init(totalRequestCount: String, webSearchRequestCount: String) {
+        self.totalRequestCount = totalRequestCount
+        self.webSearchRequestCount = webSearchRequestCount
+    }
+}
+
+/// Mimo 账户余额 (GET /api/v1/balance)
+public struct MimoBalanceReport: Equatable, Codable {
+    public let endpoint: URL
+    public let capturedAt: Date
+    public let rawJSON: String
+    public let currency: String
+    /// 可用余额（含赠送与现金）
+    public let balance: Decimal
+    /// 赠送余额
+    public let giftBalance: Decimal
+    /// 现金余额
+    public let cashBalance: Decimal
+    /// 冻结余额
+    public let frozenBalance: Decimal
+
+    public init(
+        endpoint: URL,
+        capturedAt: Date,
+        rawJSON: String,
+        currency: String,
+        balance: Decimal,
+        giftBalance: Decimal,
+        cashBalance: Decimal,
+        frozenBalance: Decimal
+    ) {
+        self.endpoint = endpoint
+        self.capturedAt = capturedAt
+        self.rawJSON = rawJSON
+        self.currency = currency
+        self.balance = balance
+        self.giftBalance = giftBalance
+        self.cashBalance = cashBalance
+        self.frozenBalance = frozenBalance
+    }
+
+    /// 实际可用余额 = 总余额 - 冻结
+    public var availableBalance: Decimal {
+        max(0, balance - frozenBalance)
+    }
+
+    /// 冻结占比（0~1），无冻结时为 0
+    public var frozenRatio: Double {
+        guard balance > 0 else { return 0 }
+        return (frozenBalance as NSDecimalNumber).doubleValue / (balance as NSDecimalNumber).doubleValue
+    }
+}
+
+/// Mimo 按量收费详情列表 (POST /api/v1/usage/detail/list)
+public struct MimoUsageDetailReport: Equatable, Codable {
+    public let endpoint: URL
+    public let capturedAt: Date
+    public let rawJSON: String
+    public let currency: String
+    public let details: [MimoUsageDetail]
+
+    public init(endpoint: URL, capturedAt: Date, rawJSON: String, currency: String, details: [MimoUsageDetail]) {
+        self.endpoint = endpoint
+        self.capturedAt = capturedAt
+        self.rawJSON = rawJSON
+        self.currency = currency
+        self.details = details
+    }
+
+    public var totalCost: Decimal {
+        details.reduce(0) { $0 + $1.consumedAmountDecimal }
+    }
+
+    public var totalTokens: Int {
+        details.reduce(0) { $0 + $1.totalToken }
+    }
+
+    public var requestCount: Int {
+        details.reduce(0) { $0 + $1.requestCount }
+    }
+}
+
+public struct MimoUsageDetail: Equatable, Identifiable, Codable {
+    public var id: String { "\(date)-\(model)-\(apiKey)" }
+
+    public let date: String
+    public let model: String
+    public let apiKey: String
+    public let currency: String
+    public let consumedAmount: String
+    public let inputHitAmount: String
+    public let inputMissAmount: String
+    public let outputAmount: String
+    public let totalToken: Int
+    public let inputHitToken: Int
+    public let inputMissToken: Int
+    public let outputToken: Int
+    public let requestCount: Int
+    public let inputAudioDuration: Int
+
+    public init(
+        date: String,
+        model: String,
+        apiKey: String,
+        currency: String,
+        consumedAmount: String,
+        inputHitAmount: String,
+        inputMissAmount: String,
+        outputAmount: String,
+        totalToken: Int,
+        inputHitToken: Int,
+        inputMissToken: Int,
+        outputToken: Int,
+        requestCount: Int,
+        inputAudioDuration: Int
+    ) {
+        self.date = date
+        self.model = model
+        self.apiKey = apiKey
+        self.currency = currency
+        self.consumedAmount = consumedAmount
+        self.inputHitAmount = inputHitAmount
+        self.inputMissAmount = inputMissAmount
+        self.outputAmount = outputAmount
+        self.totalToken = totalToken
+        self.inputHitToken = inputHitToken
+        self.inputMissToken = inputMissToken
+        self.outputToken = outputToken
+        self.requestCount = requestCount
+        self.inputAudioDuration = inputAudioDuration
+    }
+
+    public var consumedAmountDecimal: Decimal {
+        Decimal(string: consumedAmount) ?? 0
+    }
+
+    public var inputTokens: Int {
+        inputHitToken + inputMissToken
+    }
+}
+
+/// Mimo Token Plan 使用情况 (GET /api/v1/tokenPlan/usage)
+public struct MimoTokenPlanUsage: Equatable, Codable {
+    public let endpoint: URL
+    public let capturedAt: Date
+    public let rawJSON: String
+    public let monthUsage: MimoTokenPlanMonthUsage
+    public let usage: MimoTokenPlanTotalUsage
+
+    public init(
+        endpoint: URL,
+        capturedAt: Date,
+        rawJSON: String,
+        monthUsage: MimoTokenPlanMonthUsage,
+        usage: MimoTokenPlanTotalUsage
+    ) {
+        self.endpoint = endpoint
+        self.capturedAt = capturedAt
+        self.rawJSON = rawJSON
+        self.monthUsage = monthUsage
+        self.usage = usage
+    }
+
+    public var usedTokens: Int {
+        usage.planTotalToken.used
+    }
+
+    public var limitTokens: Int {
+        usage.planTotalToken.limit
+    }
+
+    public var remainingTokens: Int {
+        limitTokens - usedTokens
+    }
+
+    public var usagePercent: Double {
+        usage.planTotalToken.percent
+    }
+}
+
+public struct MimoTokenPlanMonthUsage: Equatable, Codable {
+    public let percent: Double
+    public let items: [MimoTokenPlanUsageItem]
+
+    public init(percent: Double, items: [MimoTokenPlanUsageItem]) {
+        self.percent = percent
+        self.items = items
+    }
+}
+
+public struct MimoTokenPlanTotalUsage: Equatable, Codable {
+    public let percent: Double
+    public let planTotalToken: MimoTokenPlanUsageItem
+    public let compensationTotalToken: MimoTokenPlanUsageItem
+
+    public init(percent: Double, planTotalToken: MimoTokenPlanUsageItem, compensationTotalToken: MimoTokenPlanUsageItem) {
+        self.percent = percent
+        self.planTotalToken = planTotalToken
+        self.compensationTotalToken = compensationTotalToken
+    }
+}
+
+public struct MimoTokenPlanUsageItem: Equatable, Codable {
+    public let name: String
+    public let used: Int
+    public let limit: Int
+    public let percent: Double
+
+    public init(name: String, used: Int, limit: Int, percent: Double) {
+        self.name = name
+        self.used = used
+        self.limit = limit
+        self.percent = percent
+    }
+}
+
+/// Mimo Token Plan 详情列表 (POST /api/v1/usage/token-plan/list)
+public struct MimoTokenPlanDetailReport: Equatable, Codable {
+    public let endpoint: URL
+    public let capturedAt: Date
+    public let rawJSON: String
+    public let details: [MimoTokenPlanDetail]
+
+    public init(endpoint: URL, capturedAt: Date, rawJSON: String, details: [MimoTokenPlanDetail]) {
+        self.endpoint = endpoint
+        self.capturedAt = capturedAt
+        self.rawJSON = rawJSON
+        self.details = details
+    }
+
+    public var totalTokens: Int {
+        details.reduce(0) { $0 + $1.totalToken }
+    }
+
+    public var requestCount: Int {
+        details.reduce(0) { $0 + $1.requestCount }
+    }
+}
+
+public struct MimoTokenPlanDetail: Equatable, Identifiable, Codable {
+    public var id: String { "\(date)-\(model)" }
+
+    public let date: String
+    public let model: String
+    public let totalToken: Int
+    public let inputHitToken: Int
+    public let inputMissToken: Int
+    public let outputToken: Int
+    public let requestCount: Int
+    public let inputAudioDuration: Int
+
+    public init(
+        date: String,
+        model: String,
+        totalToken: Int,
+        inputHitToken: Int,
+        inputMissToken: Int,
+        outputToken: Int,
+        requestCount: Int,
+        inputAudioDuration: Int
+    ) {
+        self.date = date
+        self.model = model
+        self.totalToken = totalToken
+        self.inputHitToken = inputHitToken
+        self.inputMissToken = inputMissToken
+        self.outputToken = outputToken
+        self.requestCount = requestCount
+        self.inputAudioDuration = inputAudioDuration
+    }
+
+    public var inputTokens: Int {
+        inputHitToken + inputMissToken
+    }
+}
+
+// MARK: - Mimo → 统一用量/成本模型转换
+
+/// 将 Mimo 按量收费详情按日期（可选过滤）聚合成 UsageModelAmount，
+/// 复用 DeepSeek 现有的数据结构，供 DashboardView / 图表 / 模型分布统一消费。
+extension MimoUsageDetailReport {
+    /// 按模型聚合为 UsageModelAmount（传 nil 表示不过滤日期）。
+    public func asUsageModelAmounts(filteringDates dates: Set<String>? = nil) -> [UsageModelAmount] {
+        let filtered = dates.map { target in details.filter { target.contains($0.date) } } ?? details
+        var grouped: [String: [String: Int]] = [:]
+        for detail in filtered {
+            var usage = grouped[detail.model] ?? [:]
+            usage["PROMPT_CACHE_HIT_TOKEN", default: 0] += detail.inputHitToken
+            usage["PROMPT_CACHE_MISS_TOKEN", default: 0] += detail.inputMissToken
+            usage["RESPONSE_TOKEN", default: 0] += detail.outputToken
+            usage["REQUEST", default: 0] += detail.requestCount
+            grouped[detail.model] = usage
+        }
+        return grouped.map { UsageModelAmount(model: $0.key, usage: $0.value) }
+    }
+
+    /// 按日期聚合成 UsageDayAmount，让 Mimo 数据可直接喂给 MiniChartView。
+    public func asUsageDayAmounts() -> [UsageDayAmount] {
+        var byDate: [String: [String: [String: Int]]] = [:]
+        var dateOrder: [String] = []
+        for detail in details {
+            if byDate[detail.date] == nil { dateOrder.append(detail.date) }
+            var usage = byDate[detail.date]?[detail.model] ?? [:]
+            usage["PROMPT_CACHE_HIT_TOKEN", default: 0] += detail.inputHitToken
+            usage["PROMPT_CACHE_MISS_TOKEN", default: 0] += detail.inputMissToken
+            usage["RESPONSE_TOKEN", default: 0] += detail.outputToken
+            usage["REQUEST", default: 0] += detail.requestCount
+            byDate[detail.date, default: [:]][detail.model] = usage
+        }
+        return dateOrder.sorted().map { date in
+            let models = byDate[date]!
+                .map { UsageModelAmount(model: $0.key, usage: $0.value) }
+            return UsageDayAmount(date: date, models: models)
+        }
+    }
+
+    /// 查询某个模型在（已过滤）详情内的总花费，供 ModelDistributionView 使用。
+    public func costForModel(_ model: UsageModelAmount, filteringDates dates: Set<String>? = nil) -> Decimal? {
+        let filtered = dates.map { target in details.filter { target.contains($0.date) } } ?? details
+        let sum = filtered.filter { $0.model == model.model }.reduce(Decimal.zero) { $0 + $1.consumedAmountDecimal }
+        return sum
+    }
+}
+
+/// 将 Mimo Token Plan 详情聚合成 UsageModelAmount，逻辑与按量收费一致。
+extension MimoTokenPlanDetailReport {
+    public func asUsageModelAmounts(filteringDates dates: Set<String>? = nil) -> [UsageModelAmount] {
+        let filtered = dates.map { target in details.filter { target.contains($0.date) } } ?? details
+        var grouped: [String: [String: Int]] = [:]
+        for detail in filtered {
+            var usage = grouped[detail.model] ?? [:]
+            usage["PROMPT_CACHE_HIT_TOKEN", default: 0] += detail.inputHitToken
+            usage["PROMPT_CACHE_MISS_TOKEN", default: 0] += detail.inputMissToken
+            usage["RESPONSE_TOKEN", default: 0] += detail.outputToken
+            usage["REQUEST", default: 0] += detail.requestCount
+            grouped[detail.model] = usage
+        }
+        return grouped.map { UsageModelAmount(model: $0.key, usage: $0.value) }
+    }
+
+    /// 按日期聚合成 UsageDayAmount（Token Plan 无金额，只有 token）。
+    public func asUsageDayAmounts() -> [UsageDayAmount] {
+        var byDate: [String: [String: [String: Int]]] = [:]
+        var dateOrder: [String] = []
+        for detail in details {
+            if byDate[detail.date] == nil { dateOrder.append(detail.date) }
+            var usage = byDate[detail.date]?[detail.model] ?? [:]
+            usage["PROMPT_CACHE_HIT_TOKEN", default: 0] += detail.inputHitToken
+            usage["PROMPT_CACHE_MISS_TOKEN", default: 0] += detail.inputMissToken
+            usage["RESPONSE_TOKEN", default: 0] += detail.outputToken
+            usage["REQUEST", default: 0] += detail.requestCount
+            byDate[detail.date, default: [:]][detail.model] = usage
+        }
+        return dateOrder.sorted().map { date in
+            let models = byDate[date]!
+                .map { UsageModelAmount(model: $0.key, usage: $0.value) }
+            return UsageDayAmount(date: date, models: models)
+        }
+    }
+}
