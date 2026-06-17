@@ -245,12 +245,12 @@ struct PlatformRowView: View {
                     if let primary = row.primaryValue {
                         Text(primary)
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.orange)
                             .monospacedDigit()
                     } else {
                         Text("--")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.orange)
                     }
 
                     if let url = row.platformURL {
