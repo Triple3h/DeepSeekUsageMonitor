@@ -346,7 +346,7 @@ public struct PlatformCost: Equatable, Identifiable {
 
 /// Mimo Cookie 解析结果
 public struct MimoCookie: Equatable {
-    public let serviceToken: String
+    public let serviceToken: String?
     public let apiPlatformServiceToken: String?
     public let userId: String?
     public let apiPlatformPh: String?
@@ -355,7 +355,7 @@ public struct MimoCookie: Equatable {
     public let rawCookie: String
 
     public init(
-        serviceToken: String,
+        serviceToken: String? = nil,
         apiPlatformServiceToken: String? = nil,
         userId: String? = nil,
         apiPlatformPh: String? = nil,
@@ -376,7 +376,7 @@ public struct MimoCookie: Equatable {
     public var cookieHeader: String {
         var parts: [String] = []
 
-        if !serviceToken.isEmpty {
+        if let serviceToken, !serviceToken.isEmpty {
             parts.append("serviceToken=\(serviceToken)")
         }
 
@@ -460,8 +460,6 @@ public struct MimoCookie: Equatable {
         print("  - xiaomichatbot_ph: \(xiaomichatbotPh != nil ? "✓" : "❌")")
         print("=========================================\n")
         #endif
-
-        guard !serviceToken.isEmpty else { return nil }
 
         return MimoCookie(
             serviceToken: serviceToken,
